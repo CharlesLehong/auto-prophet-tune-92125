@@ -1,15 +1,30 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, ReferenceLine } from "recharts";
-import { TrendingUp, Target, Activity } from "lucide-react";
+import { TrendingUp, Target, Activity, Wand2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ResultsTable } from "./ResultsTable";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
+import type { PerformanceMetric } from "@/types/forecast";
 
 interface ForecastResultsProps {
   results: ForecastResultsType;
+  selectedMetrics: PerformanceMetric[];
 }
 
-export const ForecastResults = ({ results }: ForecastResultsProps) => {
+const metricLabels: Record<PerformanceMetric, string> = {
+  mae: "MAE",
+  rmse: "RMSE",
+  mape: "MAPE",
+  mse: "MSE",
+  r2: "R²",
+  coverage: "Coverage",
+  smape: "SMAPE",
+  mase: "MASE",
+};
+
+export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsProps) => {
   if (!results || results.segments.length === 0) {
     return (
       <Card>
@@ -56,33 +71,34 @@ export const ForecastResults = ({ results }: ForecastResultsProps) => {
                     Model Performance
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-4 gap-4">
-                    {segment.metrics.mae && (
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">MAE</p>
-                        <p className="text-2xl font-bold">{segment.metrics.mae.toFixed(2)}</p>
-                      </div>
-                    )}
-                    {segment.metrics.rmse && (
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">RMSE</p>
-                        <p className="text-2xl font-bold">{segment.metrics.rmse.toFixed(2)}</p>
-                      </div>
-                    )}
-                    {segment.metrics.mape && (
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">MAPE</p>
-                        <p className="text-2xl font-bold">{segment.metrics.mape.toFixed(1)}%</p>
-                      </div>
-                    )}
-                    {segment.metrics.coverage && (
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Coverage</p>
-                        <p className="text-2xl font-bold">{segment.metrics.coverage.toFixed(1)}%</p>
-                      </div>
-                    )}
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {selectedMetrics.map((metric) => {
+                      const value = segment.metrics?.[metric];
+                      if (value === undefined) return null;
+                      
+                      const isPercentage = ['mape', 'coverage', 'smape', 'r2'].includes(metric);
+                      return (
+                        <div key={metric} className="space-y-1">
+                          <p className="text-xs text-muted-foreground">{metricLabels[metric]}</p>
+                          <p className="text-2xl font-bold">
+                            {value.toFixed(metric === 'r2' ? 3 : isPercentage ? 1 : 2)}
+                            {isPercentage && metric !== 'r2' ? '%' : ''}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
+
+                  {segment.ai_commentary && (
+                    <Alert className="bg-primary/5 border-primary/20">
+                      <Wand2 className="h-4 w-4" />
+                      <AlertDescription>
+                        <p className="font-semibold text-sm mb-2">AI Analysis</p>
+                        <p className="text-sm whitespace-pre-line">{segment.ai_commentary}</p>
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -232,62 +248,20 @@ export const ForecastResults = ({ results }: ForecastResultsProps) => {
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={segment.test_data}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis 
-                        dataKey="date" 
-                        className="text-xs"
-                        tickFormatter={(value) => new Date(value).toLocaleDateString()}
-                      />
-                      <YAxis className="text-xs" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(var(--popover))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '0.5rem',
-                        }}
-                        labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                        formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
-                      />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="actual"
-                        stroke="hsl(var(--chart-2))"
-                        strokeWidth={2}
-                        dot={{ fill: 'hsl(var(--chart-2))', r: 4 }}
-                        name="Actual"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="predicted"
-                        stroke="hsl(var(--chart-3))"
-                        strokeWidth={2}
-                        dot={{ fill: 'hsl(var(--chart-3))', r: 4 }}
-                        name="Predicted"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="lower_bound"
-                        stroke="hsl(var(--muted-foreground))"
-                        strokeWidth={1}
-                        strokeDasharray="3 3"
-                        dot={false}
-                        name="Lower Bound"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="upper_bound"
-                        stroke="hsl(var(--muted-foreground))"
-                        strokeWidth={1}
-                        strokeDasharray="3 3"
-                        dot={false}
-                        name="Upper Bound"
-                      />
+...
                     </LineChart>
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
             )}
+
+            {/* Results Table */}
+            <ResultsTable
+              segment={segment.segment}
+              trainingData={segment.training_data}
+              testData={segment.test_data}
+              forecastData={segment.forecast_data}
+            />
           </TabsContent>
         ))}
       </Tabs>

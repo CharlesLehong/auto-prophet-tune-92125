@@ -10,9 +10,11 @@ import { SegmentMapper } from "@/components/forecast/SegmentMapper";
 import { SegmentRegressorConfig } from "@/components/forecast/SegmentRegressorConfig";
 import { ForecastProgress } from "@/components/forecast/ForecastProgress";
 import { ForecastResults } from "@/components/forecast/ForecastResults";
+import { PerformanceMetricSelector } from "@/components/forecast/PerformanceMetricSelector";
+import { DataAnalysisTools } from "@/components/forecast/DataAnalysisTools";
 import { ChevronRight, Play } from "lucide-react";
 import { toast } from "sonner";
-import type { ForecastModel, ProphetParameters, SegmentConfig } from "@/types/forecast";
+import type { ForecastModel, ProphetParameters, SegmentConfig, PerformanceMetric } from "@/types/forecast";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
 
 // Helper function to generate mock forecast results
@@ -22,7 +24,8 @@ const generateMockForecast = (
   segment: SegmentConfig,
   dateColumn: string,
   dependentVariable: string,
-  prophetParams: ProphetParameters
+  prophetParams: ProphetParameters,
+  selectedMetrics: PerformanceMetric[]
 ) => {
   const lowerPercentile = prophetParams.lower_bound ?? (1 - prophetParams.interval_width) / 2;
   const upperPercentile = prophetParams.upper_bound ?? (1 + prophetParams.interval_width) / 2;
@@ -78,11 +81,52 @@ const generateMockForecast = (
     });
   }
 
-  // Calculate metrics
-  const mae = test.reduce((sum, point) => sum + Math.abs(point.actual! - point.predicted), 0) / test.length;
-  const rmse = Math.sqrt(test.reduce((sum, point) => sum + Math.pow(point.actual! - point.predicted, 2), 0) / test.length);
-  const mape = test.reduce((sum, point) => sum + Math.abs((point.actual! - point.predicted) / point.actual!) * 100, 0) / test.length;
-  const coverage = test.filter(point => point.actual! >= point.lower_bound && point.actual! <= point.upper_bound).length / test.length * 100;
+  // Calculate all requested metrics
+  const metrics: any = {};
+  const actualValues = test.map(t => t.actual!);
+  const predictedValues = test.map(t => t.predicted);
+  const errors = test.map((t, i) => t.actual! - t.predicted);
+  
+  if (selectedMetrics.includes('mae')) {
+    metrics.mae = errors.reduce((sum, e) => sum + Math.abs(e), 0) / errors.length;
+  }
+  if (selectedMetrics.includes('mse')) {
+    metrics.mse = errors.reduce((sum, e) => sum + e * e, 0) / errors.length;
+  }
+  if (selectedMetrics.includes('rmse')) {
+    metrics.rmse = Math.sqrt(errors.reduce((sum, e) => sum + e * e, 0) / errors.length);
+  }
+  if (selectedMetrics.includes('mape')) {
+    metrics.mape = errors.reduce((sum, e, i) => sum + Math.abs(e / actualValues[i]) * 100, 0) / errors.length;
+  }
+  if (selectedMetrics.includes('smape')) {
+    metrics.smape = errors.reduce((sum, e, i) => {
+      const denominator = (Math.abs(actualValues[i]) + Math.abs(predictedValues[i])) / 2;
+      return sum + Math.abs(e) / denominator * 100;
+    }, 0) / errors.length;
+  }
+  if (selectedMetrics.includes('r2')) {
+    const mean = actualValues.reduce((s, v) => s + v, 0) / actualValues.length;
+    const ssRes = errors.reduce((s, e) => s + e * e, 0);
+    const ssTot = actualValues.reduce((s, v) => s + Math.pow(v - mean, 2), 0);
+    metrics.r2 = 1 - (ssRes / ssTot);
+  }
+  if (selectedMetrics.includes('coverage')) {
+    metrics.coverage = test.filter(t => t.actual! >= t.lower_bound && t.actual! <= t.upper_bound).length / test.length * 100;
+  }
+  if (selectedMetrics.includes('mase')) {
+    const naiveErrors = actualValues.slice(1).map((v, i) => Math.abs(v - actualValues[i]));
+    const meanNaiveError = naiveErrors.reduce((s, e) => s + e, 0) / naiveErrors.length;
+    metrics.mase = (errors.reduce((s, e) => s + Math.abs(e), 0) / errors.length) / meanNaiveError;
+  }
+
+  // AI Commentary
+  const ai_commentary = 
+    `Performance Analysis:\n\n` +
+    `The model shows ${metrics.mape < 10 ? 'excellent' : metrics.mape < 20 ? 'good' : 'moderate'} accuracy with MAPE of ${metrics.mape?.toFixed(1)}%. ` +
+    `${metrics.coverage > 90 ? 'Confidence intervals effectively capture uncertainty.' : 'Consider adjusting interval width.'}\n\n` +
+    `The ${metrics.r2 > 0.8 ? 'strong' : metrics.r2 > 0.6 ? 'moderate' : 'weak'} R² of ${metrics.r2?.toFixed(3)} indicates ` +
+    `${metrics.r2 > 0.8 ? 'the model captures most variance in the data' : 'there may be room for improvement'}.`;
 
   return {
     segment: segment.segment,
@@ -90,7 +134,8 @@ const generateMockForecast = (
     training_data: training,
     test_data: test,
     forecast_data: forecast,
-    metrics: { mae, rmse, mape, coverage },
+    metrics,
+    ai_commentary,
   };
 };
 
@@ -106,6 +151,7 @@ const Index = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [segmentProgress, setSegmentProgress] = useState<any[]>([]);
   const [forecastResults, setForecastResults] = useState<ForecastResultsType | null>(null);
+  const [selectedMetrics, setSelectedMetrics] = useState<PerformanceMetric[]>(['mae', 'rmse', 'mape', 'coverage']);
   
   const [prophetParams, setProphetParams] = useState<ProphetParameters>({
     growth: 'linear',
@@ -247,7 +293,8 @@ const Index = () => {
         segment,
         dateColumn,
         dependentVariable,
-        prophetParams
+        prophetParams,
+        selectedMetrics
       );
       allResults.push(mockResults);
 
@@ -290,14 +337,15 @@ const Index = () => {
         </header>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8 bg-card">
+          <TabsList className="grid w-full grid-cols-9 bg-card text-xs">
             <TabsTrigger value="upload">Upload</TabsTrigger>
             <TabsTrigger value="model" disabled={csvData.length === 0}>Model</TabsTrigger>
             <TabsTrigger value="variables" disabled={csvData.length === 0}>Variables</TabsTrigger>
+            <TabsTrigger value="analysis" disabled={csvData.length === 0}>Analysis</TabsTrigger>
             <TabsTrigger value="segments" disabled={!dateColumn}>Segments</TabsTrigger>
             <TabsTrigger value="regressors" disabled={segments.length === 0}>Regressors</TabsTrigger>
+            <TabsTrigger value="metrics" disabled={segments.length === 0}>Metrics</TabsTrigger>
             <TabsTrigger value="parameters" disabled={segments.length === 0}>Parameters</TabsTrigger>
-            <TabsTrigger value="visualize" disabled={segments.length === 0}>Visualize</TabsTrigger>
             <TabsTrigger value="results" disabled={!forecastResults}>Results</TabsTrigger>
           </TabsList>
 
@@ -339,9 +387,26 @@ const Index = () => {
             />
             <div className="flex justify-end">
               <Button 
-                onClick={() => setActiveTab("segments")} 
+                onClick={() => setActiveTab("analysis")} 
                 disabled={!dateColumn || !segmentColumn || !dependentVariable}
               >
+                Next: Analyze Data
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="analysis" className="space-y-6">
+            <DataAnalysisTools
+              data={csvData}
+              dateColumn={dateColumn}
+              valueColumn={dependentVariable}
+              onTransformationApply={(transform) => {
+                toast.success(`Applied ${transform.type} transformation`);
+              }}
+            />
+            <div className="flex justify-end">
+              <Button onClick={() => setActiveTab("segments")}>
                 Next: Configure Segments
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
@@ -370,6 +435,19 @@ const Index = () => {
               segments={segments}
               availableRegressors={availableRegressors}
               onSegmentsChange={setSegments}
+            />
+            <div className="flex justify-end">
+              <Button onClick={() => setActiveTab("metrics")}>
+                Next: Select Metrics
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="metrics" className="space-y-6">
+            <PerformanceMetricSelector
+              selectedMetrics={selectedMetrics}
+              onMetricsChange={setSelectedMetrics}
             />
             <div className="flex justify-end">
               <Button onClick={() => setActiveTab("parameters")}>
@@ -428,7 +506,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="results" className="space-y-6">
-            {forecastResults && <ForecastResults results={forecastResults} />}
+            {forecastResults && <ForecastResults results={forecastResults} selectedMetrics={selectedMetrics} />}
           </TabsContent>
         </Tabs>
       </div>

@@ -18,8 +18,13 @@ export interface SegmentForecastResult {
     mae?: number;
     rmse?: number;
     mape?: number;
+    mse?: number;
+    r2?: number;
     coverage?: number;
+    smape?: number;
+    mase?: number;
   };
+  ai_commentary?: string;
 }
 
 export interface ForecastResults {

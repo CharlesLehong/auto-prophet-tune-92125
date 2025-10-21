@@ -1,4 +1,4 @@
-export type ForecastModel = 'prophet' | 'autogluon';
+export type ForecastModel = 'prophet' | 'autogluon' | 'arima' | 'ar' | 'arma';
 
 export interface ProphetParameters {
   growth: 'linear' | 'logistic';
@@ -30,6 +30,21 @@ export interface AutogluonParameters {
   prediction_length: number;
   eval_metric: string;
   num_val_windows: number;
+  interval_width: number;
+  lower_bound?: number;
+  upper_bound?: number;
+}
+
+export interface TraditionalTSParameters {
+  order_p?: number; // AR order
+  order_d?: number; // Differencing order
+  order_q?: number; // MA order
+  seasonal?: boolean;
+  seasonal_order_P?: number;
+  seasonal_order_D?: number;
+  seasonal_order_Q?: number;
+  seasonal_period?: number;
+  confidence_level: number;
 }
 
 export interface Regressor {
@@ -59,4 +74,8 @@ export interface ForecastConfig {
   segments: SegmentConfig[];
   prophet_params?: ProphetParameters;
   autogluon_params?: AutogluonParameters;
+  traditional_params?: TraditionalTSParameters;
+  performance_metrics: PerformanceMetric[];
 }
+
+export type PerformanceMetric = 'mae' | 'rmse' | 'mape' | 'mse' | 'r2' | 'coverage' | 'smape' | 'mase';
