@@ -647,6 +647,137 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                     </AlertDescription>
                   </Alert>
 
+                  {/* ADF Interpretation */}
+                  <Card className="bg-muted/50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xs flex items-center gap-2">
+                        <Info className="h-4 w-4" />
+                        ADF Test Interpretation
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-xs">
+                      {(() => {
+                        const adf = currentState.stationarityTest;
+                        const testStat = adf.test_statistic;
+                        const pValue = adf.p_value;
+                        const cv1 = adf.critical_values["1%"];
+                        const cv5 = adf.critical_values["5%"];
+                        const cv10 = adf.critical_values["10%"];
+                        
+                        if (adf.is_stationary) {
+                          return (
+                            <div className="space-y-2">
+                              <div className="flex items-start gap-2">
+                                <Badge variant="default" className="mt-0.5">Stationary</Badge>
+                                <div>
+                                  The test statistic ({testStat.toFixed(3)}) is more negative than the critical values, 
+                                  and the p-value ({pValue.toFixed(4)}) is below 0.05, indicating strong evidence against 
+                                  a unit root (non-stationarity).
+                                </div>
+                              </div>
+                              <Separator />
+                              <div className="bg-green-500/10 p-2 rounded border border-green-500/20">
+                                <div className="font-semibold">✓ Good for modeling</div>
+                                <div className="mt-1">
+                                  This variable has constant mean and variance over time, making it suitable for 
+                                  time series forecasting models without additional transformations.
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          // Determine severity
+                          let severity = "";
+                          let explanation = "";
+                          let recommendations = [];
+                          
+                          if (pValue > 0.10) {
+                            severity = "Strong non-stationarity";
+                            explanation = "The high p-value indicates strong evidence of a unit root. The series likely has a trending mean or changing variance.";
+                            recommendations = [
+                              "Apply first differencing to remove trend",
+                              "If trend persists, try second differencing",
+                              "Consider log transformation if variance increases with level",
+                              "Check for seasonal patterns that might need seasonal differencing"
+                            ];
+                          } else if (pValue > 0.05) {
+                            severity = "Moderate non-stationarity";
+                            explanation = "The p-value is marginally above the 5% threshold. The series shows some evidence of non-stationary behavior.";
+                            recommendations = [
+                              "Try first differencing to stabilize the mean",
+                              "Consider detrending if a linear trend is visible",
+                              "May benefit from additional transformations like log or Box-Cox"
+                            ];
+                          } else {
+                            severity = "Weak stationarity";
+                            explanation = "While technically failing at 5% level, the series is close to stationary.";
+                            recommendations = [
+                              "Light differencing or detrending may help",
+                              "Series might work in models with trend components",
+                              "Monitor residuals for stationarity after modeling"
+                            ];
+                          }
+                          
+                          // Check which critical value threshold failed
+                          let failedAt = "";
+                          if (testStat > cv10) {
+                            failedAt = "Fails even at 10% significance level";
+                          } else if (testStat > cv5) {
+                            failedAt = "Fails at 5% level but passes at 10%";
+                          } else if (testStat > cv1) {
+                            failedAt = "Fails at 1% level but passes at 5%";
+                          }
+                          
+                          return (
+                            <div className="space-y-2">
+                              <div className="flex items-start gap-2">
+                                <Badge variant="destructive" className="mt-0.5">{severity}</Badge>
+                                <div>{explanation}</div>
+                              </div>
+                              
+                              <Separator />
+                              
+                              <div className="space-y-1">
+                                <div className="font-semibold">Why is it non-stationary?</div>
+                                <div className="pl-3 space-y-1">
+                                  <div>• {failedAt}</div>
+                                  <div>• P-value ({pValue.toFixed(4)}) exceeds 0.05 significance threshold</div>
+                                  <div>• Test statistic ({testStat.toFixed(3)}) not negative enough:</div>
+                                  <div className="pl-4 text-muted-foreground">
+                                    1% CV: {cv1.toFixed(2)} | 5% CV: {cv5.toFixed(2)} | 10% CV: {cv10.toFixed(2)}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <Separator />
+                              
+                              <div className="space-y-1">
+                                <div className="font-semibold">Likely causes:</div>
+                                <div className="pl-3 space-y-0.5">
+                                  <div>• <strong>Trend:</strong> Mean changes systematically over time</div>
+                                  <div>• <strong>Changing variance:</strong> Volatility increases/decreases over time</div>
+                                  <div>• <strong>Structural breaks:</strong> Level shifts at specific points</div>
+                                  <div>• <strong>Seasonality:</strong> Repeating patterns not yet removed</div>
+                                </div>
+                              </div>
+                              
+                              <Separator />
+                              
+                              <div className="bg-orange-500/10 p-2 rounded border border-orange-500/20">
+                                <div className="font-semibold mb-1">Recommended actions:</div>
+                                <div className="space-y-0.5">
+                                  {recommendations.map((rec, i) => (
+                                    <div key={i}>• {rec}</div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                      })()}
+                    </CardContent>
+                  </Card>
+
                   {/* ADF Comparison */}
                   {currentState.beforeStats && currentState.afterStats && (
                     <Card className="bg-muted/50">
