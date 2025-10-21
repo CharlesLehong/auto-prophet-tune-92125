@@ -29,38 +29,47 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
   const [aiInsights, setAiInsights] = useState<string>("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedVariable, setSelectedVariable] = useState<string>("dependent");
+  const [stationarityVariable, setStationarityVariable] = useState<string>("dependent");
+  const [acfVariable, setAcfVariable] = useState<string>("dependent");
+  const [pacfVariable, setPacfVariable] = useState<string>("dependent");
 
   const runStationarityTest = () => {
     // Mock ADF test - in production, this would call a backend function
+    const variableName = stationarityVariable === "dependent" ? valueColumn : stationarityVariable;
     const mockResult = {
       test_statistic: -2.5,
       p_value: 0.12,
       critical_values: { "1%": -3.43, "5%": -2.86, "10%": -2.57 },
       is_stationary: false,
-      recommendation: "Data appears non-stationary. Consider differencing or detrending.",
+      recommendation: `Data for "${variableName}" appears non-stationary. Consider differencing or detrending.`,
+      variable: variableName,
     };
     setStationarityTest(mockResult);
   };
 
   const calculateACF = () => {
     // Mock ACF calculation
+    const variableName = acfVariable === "dependent" ? valueColumn : acfVariable;
     const lags = Array.from({ length: 20 }, (_, i) => i);
     const correlations = lags.map(lag => Math.exp(-lag / 5) * (Math.random() * 0.4 + 0.6));
     setAcfData({
       lags,
       data: lags.map((lag, i) => ({ lag, correlation: correlations[i] })),
       confidence: 1.96 / Math.sqrt(data.length),
+      variable: variableName,
     });
   };
 
   const calculatePACF = () => {
     // Mock PACF calculation
+    const variableName = pacfVariable === "dependent" ? valueColumn : pacfVariable;
     const lags = Array.from({ length: 20 }, (_, i) => i);
     const correlations = lags.map(lag => lag === 0 ? 1 : Math.exp(-lag / 3) * (Math.random() - 0.5));
     setPacfData({
       lags,
       data: lags.map((lag, i) => ({ lag, correlation: correlations[i] })),
       confidence: 1.96 / Math.sqrt(data.length),
+      variable: variableName,
     });
   };
 
@@ -177,14 +186,31 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
             </TabsList>
 
             <TabsContent value="stationarity" className="space-y-4">
-              <div className="flex gap-2">
-                <Button onClick={runStationarityTest} variant="outline">
-                  Run Augmented Dickey-Fuller Test
-                </Button>
-                <Button onClick={getAIInsights} variant="outline" disabled={isAnalyzing}>
-                  <Wand2 className="mr-2 h-4 w-4" />
-                  {isAnalyzing ? "Analyzing..." : "Get AI Insights"}
-                </Button>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Select Variable to Test</Label>
+                  <Select value={stationarityVariable} onValueChange={setStationarityVariable}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="dependent">Dependent Variable ({valueColumn})</SelectItem>
+                      {regressors?.map(reg => (
+                        <SelectItem key={reg} value={reg}>Regressor: {reg}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button onClick={runStationarityTest} variant="outline">
+                    Run Augmented Dickey-Fuller Test
+                  </Button>
+                  <Button onClick={getAIInsights} variant="outline" disabled={isAnalyzing}>
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    {isAnalyzing ? "Analyzing..." : "Get AI Insights"}
+                  </Button>
+                </div>
               </div>
 
               {stationarityTest && (
@@ -198,6 +224,9 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                     <div className="space-y-2">
                       <p className="font-semibold">
                         {stationarityTest.is_stationary ? "Data is stationary" : "Data is non-stationary"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Variable: <Badge variant="outline">{stationarityTest.variable}</Badge>
                       </p>
                       <div className="text-sm space-y-1">
                         <p>Test Statistic: {stationarityTest.test_statistic.toFixed(3)}</p>
@@ -226,13 +255,33 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
             </TabsContent>
 
             <TabsContent value="acf" className="space-y-4">
-              <Button onClick={calculateACF} variant="outline">
-                Calculate Autocorrelation Function
-              </Button>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Select Variable to Analyze</Label>
+                  <Select value={acfVariable} onValueChange={setAcfVariable}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="dependent">Dependent Variable ({valueColumn})</SelectItem>
+                      {regressors?.map(reg => (
+                        <SelectItem key={reg} value={reg}>Regressor: {reg}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button onClick={calculateACF} variant="outline">
+                  Calculate Autocorrelation Function
+                </Button>
+              </div>
 
               {acfData && (
                 <div>
-                  <h4 className="text-sm font-semibold mb-4">Autocorrelation Function (ACF)</h4>
+                  <div className="flex items-center gap-2 mb-4">
+                    <h4 className="text-sm font-semibold">Autocorrelation Function (ACF)</h4>
+                    <Badge variant="outline">{acfData.variable}</Badge>
+                  </div>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={acfData.data}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -259,13 +308,33 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
             </TabsContent>
 
             <TabsContent value="pacf" className="space-y-4">
-              <Button onClick={calculatePACF} variant="outline">
-                Calculate Partial Autocorrelation Function
-              </Button>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Select Variable to Analyze</Label>
+                  <Select value={pacfVariable} onValueChange={setPacfVariable}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="dependent">Dependent Variable ({valueColumn})</SelectItem>
+                      {regressors?.map(reg => (
+                        <SelectItem key={reg} value={reg}>Regressor: {reg}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button onClick={calculatePACF} variant="outline">
+                  Calculate Partial Autocorrelation Function
+                </Button>
+              </div>
 
               {pacfData && (
                 <div>
-                  <h4 className="text-sm font-semibold mb-4">Partial Autocorrelation Function (PACF)</h4>
+                  <div className="flex items-center gap-2 mb-4">
+                    <h4 className="text-sm font-semibold">Partial Autocorrelation Function (PACF)</h4>
+                    <Badge variant="outline">{pacfData.variable}</Badge>
+                  </div>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={pacfData.data}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
