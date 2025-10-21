@@ -66,7 +66,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
   // Run AI analysis on all variables
   const runAIAnalysis = async () => {
     setIsAIAnalyzing(true);
-    toast.info("AI is analyzing your variables...");
+    toast.info("AI is analyzing and transforming all variables...");
 
     try {
       const variables = allVariables.map(v => ({
@@ -74,6 +74,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
         type: v === 'dependent' ? 'dependent' : 'regressor'
       }));
 
+      // Step 1: Get AI recommendations
       const { data: result, error } = await supabase.functions.invoke('analyze-transformations', {
         body: {
           variables,
@@ -83,23 +84,89 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
 
       if (error) throw error;
 
-      // Update variable states with AI recommendations
+      // Step 2: Apply all transformations and run statistical tests in parallel
       const newStates: Record<string, VariableState> = {};
-      result.analyses.forEach((analysis: any) => {
+      const dependentDataValues = data.map(row => row[valueColumn]);
+      
+      toast.info(`Processing ${result.analyses.length} variables in parallel...`);
+      
+      const analysisPromises = result.analyses.map(async (analysis: any) => {
         const varKey = analysis.type === 'dependent' ? 'dependent' : analysis.variable;
-        newStates[varKey] = {
-          status: 'analyzing',
-          transformations: analysis.recommendations.map((rec: any) => ({
-            type: rec.transform,
-            variable: varKey,
-            applied: false
-          })),
-          aiRecommendations: analysis
-        };
+        const columnName = varKey === "dependent" ? valueColumn : varKey;
+        const variableData = data.map(row => row[columnName]);
+        
+        // Get transformations from AI recommendations
+        const transformations = analysis.recommendations.map((rec: any) => ({
+          type: rec.transform,
+          variable: varKey,
+          applied: true
+        }));
+
+        try {
+          // Run statistical tests with AI-recommended transformations
+          const { data: testResults, error: testError } = await supabase.functions.invoke('statistical-tests', {
+            body: {
+              variable: varKey,
+              data: variableData,
+              transformations: transformations,
+              dependentData: varKey !== "dependent" ? dependentDataValues : null
+            }
+          });
+
+          if (testError) throw testError;
+
+          // Create transformed data for visualization
+          const originalData = getTimeSeriesData(varKey);
+          const transformed = testResults.transformedDataSample 
+            ? originalData.slice(0, testResults.transformedDataSample.length).map((d: any, i: number) => ({
+                ...d,
+                value: testResults.transformedDataSample[i]
+              }))
+            : originalData;
+
+          return {
+            varKey,
+            state: {
+              status: 'transformed' as VariableStatus,
+              transformations: transformations,
+              aiRecommendations: analysis,
+              stationarityTest: testResults.after?.adf || testResults.before.adf,
+              acfData: testResults.after?.acf || testResults.before.acf,
+              pacfData: testResults.after?.pacf || testResults.before.pacf,
+              beforeData: originalData,
+              afterData: transformed,
+              beforeStats: testResults.before,
+              afterStats: testResults.after,
+              featureImportance: testResults.featureImportance
+            }
+          };
+        } catch (err) {
+          console.error(`Error processing ${varKey}:`, err);
+          // Return partial state if tests fail
+          return {
+            varKey,
+            state: {
+              status: 'analyzing' as VariableStatus,
+              transformations: transformations,
+              aiRecommendations: analysis
+            }
+          };
+        }
+      });
+
+      // Wait for all analyses to complete
+      const results = await Promise.all(analysisPromises);
+      
+      // Update states
+      results.forEach(({ varKey, state }) => {
+        newStates[varKey] = state;
       });
 
       setVariableStates(newStates);
-      toast.success("AI analysis complete! Click on variables to review recommendations.");
+      
+      const completedCount = Object.values(newStates).filter(s => s.status === 'transformed').length;
+      toast.success(`✅ Analysis complete! ${completedCount}/${result.analyses.length} variables processed with full statistical analysis.`);
+      
     } catch (error: any) {
       console.error('AI analysis error:', error);
       toast.error(error.message || "Failed to analyze variables");
@@ -285,7 +352,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
             AI-Powered Transformation Analysis
           </CardTitle>
           <CardDescription>
-            Let AI analyze all variables and suggest optimal transformations automatically
+            Automatically analyzes, transforms, and runs statistical tests (ADF, ACF, PACF, correlation) on all variables in parallel
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -298,12 +365,12 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
             {isAIAnalyzing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Analyzing Variables...
+                Running Full Analysis Pipeline...
               </>
             ) : (
               <>
                 <Wand2 className="mr-2 h-4 w-4" />
-                Run AI Analysis on All Variables
+                Auto-Transform All Variables (~30s)
               </>
             )}
           </Button>
@@ -329,9 +396,9 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
               <Alert className="mt-2">
                 <Info className="h-4 w-4" />
                 <AlertDescription className="text-xs">
-                  <strong>Next steps:</strong> Click on each variable card to review AI recommendations, 
-                  add/modify transformations, and save. Statistical tests (ADF, ACF, PACF, correlation) 
-                  run automatically when you apply transformations.
+                  <strong>Automated workflow:</strong> The AI analyzes all variables, applies recommended 
+                  transformations, and runs complete statistical tests (ADF, ACF, PACF, correlation) automatically. 
+                  You can still click variables to review results or make manual adjustments.
                 </AlertDescription>
               </Alert>
             </div>
