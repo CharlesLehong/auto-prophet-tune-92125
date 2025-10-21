@@ -115,6 +115,13 @@ export const applyTransformation = (
         return data.map(val => val > 0 ? Math.log(val) : NaN);
       }
       return data.map(val => val > 0 ? (Math.pow(val, lambda) - 1) / lambda : NaN);
+    case 'standardize':
+      // Z-score normalization: (x - mean) / std
+      const validData = data.filter(val => !isNaN(val) && isFinite(val));
+      const mean = validData.reduce((sum, val) => sum + val, 0) / validData.length;
+      const variance = validData.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / validData.length;
+      const std = Math.sqrt(variance);
+      return data.map(val => std > 0 ? (val - mean) / std : 0);
     default:
       return data;
   }
@@ -164,6 +171,12 @@ export const getTransformationInfo = (type: string) => {
       description: "Power transformation that automatically finds optimal lambda",
       useCase: "Stabilizes variance and makes data more normal. More flexible than log transform.",
       example: "Any data with non-constant variance that needs normalization"
+    },
+    standardize: {
+      name: "Standardize (Z-Score)",
+      description: "Transforms data to have mean=0 and standard deviation=1 using (x - mean) / std",
+      useCase: "Makes variables comparable when they have different scales or units. Essential for comparing multiple time series.",
+      example: "Comparing sales ($) with temperature (°C), or variables with very different magnitudes"
     }
   };
   return info[type] || null;

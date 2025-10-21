@@ -762,6 +762,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Select a transformation</SelectItem>
+                      <SelectItem value="standardize">Standardize (Z-Score)</SelectItem>
                       <SelectItem value="log">Log Transform</SelectItem>
                       <SelectItem value="difference">First Difference</SelectItem>
                       <SelectItem value="seasonal_difference">Seasonal Difference</SelectItem>
@@ -864,25 +865,52 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                 <CardHeader>
                   <CardTitle className="text-sm">Multi-Variable Comparison (After Transformations)</CardTitle>
                   <CardDescription>
-                    Compare all transformed variables side-by-side. Each line represents a different variable after its saved transformations have been applied.
+                    Compare all transformed variables side-by-side. Dependent variable shown in blue, regressors in warm colors.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Show which transformations were applied to each */}
                   <div className="grid gap-2 text-xs">
-                    {Object.entries(savedTransformations).map(([variable, transforms]) => (
-                      <div key={variable} className="flex items-center gap-2 p-2 bg-muted/50 rounded">
-                        <Badge variant="outline" className="shrink-0">
-                          {getVariableDisplayName(variable)}
-                        </Badge>
-                        <span className="text-muted-foreground">
-                          {transforms.map((t: any) => getTransformationInfo(t.type)?.name).join(' → ')}
-                        </span>
-                      </div>
-                    ))}
+                    <div className="font-semibold text-sm mb-1 flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-primary"></div>
+                      Dependent Variable
+                    </div>
+                    {Object.entries(savedTransformations)
+                      .filter(([variable]) => variable === 'dependent')
+                      .map(([variable, transforms]) => (
+                        <div key={variable} className="flex items-center gap-2 p-2 bg-primary/5 border border-primary/20 rounded">
+                          <Badge variant="default" className="shrink-0">
+                            {getVariableDisplayName(variable)}
+                          </Badge>
+                          <span className="text-muted-foreground text-xs">
+                            {transforms.map((t: any) => getTransformationInfo(t.type)?.name).join(' → ')}
+                          </span>
+                        </div>
+                      ))}
+                    
+                    {Object.entries(savedTransformations).filter(([variable]) => variable !== 'dependent').length > 0 && (
+                      <>
+                        <div className="font-semibold text-sm mt-2 mb-1 flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-chart-2"></div>
+                          Regressors
+                        </div>
+                        {Object.entries(savedTransformations)
+                          .filter(([variable]) => variable !== 'dependent')
+                          .map(([variable, transforms]) => (
+                            <div key={variable} className="flex items-center gap-2 p-2 bg-muted/50 rounded">
+                              <Badge variant="outline" className="shrink-0">
+                                {getVariableDisplayName(variable)}
+                              </Badge>
+                              <span className="text-muted-foreground text-xs">
+                                {transforms.map((t: any) => getTransformationInfo(t.type)?.name).join(' → ')}
+                              </span>
+                            </div>
+                          ))}
+                      </>
+                    )}
                   </div>
 
-                  <ResponsiveContainer width="100%" height={350}>
+                  <ResponsiveContainer width="100%" height={400}>
                     <LineChart data={getTimeSeriesData('dependent')}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis 
@@ -895,7 +923,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                       />
                       <YAxis 
                         tick={{ fontSize: 10 }}
-                        label={{ value: 'Transformed Values', angle: -90, position: 'insideLeft' }}
+                        label={{ value: 'Transformed Values (Original Scale)', angle: -90, position: 'insideLeft' }}
                       />
                       <Tooltip
                         contentStyle={{
@@ -903,16 +931,23 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                           border: '1px solid hsl(var(--border))',
                           borderRadius: '0.5rem',
                         }}
+                        formatter={(value: any, name: any) => [value.toFixed(2), name]}
                       />
                       <Legend 
                         verticalAlign="top" 
-                        height={36}
+                        height={50}
                         iconType="line"
                         wrapperStyle={{ paddingBottom: '10px' }}
                       />
                       {Object.keys(savedTransformations).map((variable, index) => {
                         const varData = getTimeSeriesData(variable);
-                        const colors = ['hsl(var(--primary))', 'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
+                        const isDependent = variable === 'dependent';
+                        // Dependent: blue (primary), Regressors: warm colors
+                        const regressorColors = ['hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
+                        const color = isDependent 
+                          ? 'hsl(var(--primary))' 
+                          : regressorColors[(index - 1) % regressorColors.length];
+                        
                         return (
                           <Line 
                             key={variable}
@@ -920,18 +955,28 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                             type="monotone" 
                             dataKey="value" 
                             name={getVariableDisplayName(variable)}
-                            stroke={colors[index % colors.length]} 
-                            strokeWidth={2}
+                            stroke={color} 
+                            strokeWidth={isDependent ? 2.5 : 2}
                             dot={false}
+                            strokeDasharray={isDependent ? "0" : "0"}
                           />
                         );
                       })}
                     </LineChart>
                   </ResponsiveContainer>
                   
-                  <p className="text-xs text-muted-foreground">
-                    Note: This shows the original data for comparison. In the actual model, the saved transformations will be applied to each variable.
-                  </p>
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription className="text-xs">
+                      <p className="font-semibold mb-1">Understanding this comparison:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li><strong>Blue line</strong> = Dependent variable (what you're forecasting)</li>
+                        <li><strong>Warm colors</strong> = Regressors (explanatory variables)</li>
+                        <li>This shows original data - transformations will be applied during modeling</li>
+                        <li>Tip: Use "Standardize" transformation on all variables to make them directly comparable</li>
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
                 </CardContent>
               </Card>
             )}
