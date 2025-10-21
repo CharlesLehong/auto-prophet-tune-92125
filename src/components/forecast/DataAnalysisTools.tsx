@@ -23,17 +23,21 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
   const [stationarityTest, setStationarityTest] = useState<any>(null);
   const [acfData, setAcfData] = useState<any>(null);
   const [pacfData, setPacfData] = useState<any>(null);
-  const [transformationChain, setTransformationChain] = useState<any[]>([]);
-  const [selectedTransform, setSelectedTransform] = useState<string>("none");
-  const [postTransformTest, setPostTransformTest] = useState<any>(null);
   const [aiInsights, setAiInsights] = useState<string>("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [selectedVariable, setSelectedVariable] = useState<string>("dependent");
   const [stationarityVariable, setStationarityVariable] = useState<string>("dependent");
   const [acfVariable, setAcfVariable] = useState<string>("dependent");
   const [pacfVariable, setPacfVariable] = useState<string>("dependent");
+  
+  // Transformation workflow states
+  const [currentVariable, setCurrentVariable] = useState<string>("dependent");
+  const [currentTransformations, setCurrentTransformations] = useState<any[]>([]);
+  const [selectedTransform, setSelectedTransform] = useState<string>("none");
+  const [savedTransformations, setSavedTransformations] = useState<Record<string, any[]>>({});
   const [beforeTransformData, setBeforeTransformData] = useState<any[]>([]);
   const [afterTransformData, setAfterTransformData] = useState<any[]>([]);
+  const [currentStationarityTest, setCurrentStationarityTest] = useState<any>(null);
+  const [isStationary, setIsStationary] = useState<boolean>(false);
 
   // Prepare time series data for visualization
   const getTimeSeriesData = (variable: string) => {
@@ -100,24 +104,44 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
     }, 1500);
   };
 
+  // Get all available variables
+  const allVariables = ['dependent', ...(regressors || [])];
+  const getVariableDisplayName = (variable: string) => 
+    variable === 'dependent' ? valueColumn : variable;
+  
+  // Check if dependent variable is processed and stationary
+  const isDependentProcessed = () => {
+    const depTransforms = savedTransformations['dependent'];
+    return depTransforms && depTransforms.length > 0;
+  };
+
+  // Get available variables for processing
+  const getAvailableVariables = () => {
+    if (!isDependentProcessed()) {
+      return ['dependent']; // Must process dependent first
+    }
+    return allVariables; // All variables available after dependent is done
+  };
+
   const addTransformation = () => {
     if (selectedTransform !== "none") {
-      // Capture before transformation data
-      if (transformationChain.length === 0) {
-        setBeforeTransformData(getTimeSeriesData(selectedVariable));
+      // Capture before transformation data on first transform
+      if (currentTransformations.length === 0) {
+        setBeforeTransformData(getTimeSeriesData(currentVariable));
       }
 
       const newTransform = { 
         type: selectedTransform, 
-        variable: selectedVariable,
+        variable: currentVariable,
         applied: true 
       };
-      setTransformationChain([...transformationChain, newTransform]);
+      const updatedTransforms = [...currentTransformations, newTransform];
+      setCurrentTransformations(updatedTransforms);
       setSelectedTransform("none");
       
       // Simulate transformed data visualization
       setTimeout(() => {
-        const originalData = getTimeSeriesData(selectedVariable);
+        const originalData = getTimeSeriesData(currentVariable);
         // Mock transformation effect
         const transformed = originalData.map((d, i) => ({
           ...d,
@@ -127,33 +151,74 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
         }));
         setAfterTransformData(transformed);
 
-        // Run stationarity test after adding transformation
+        // Run stationarity test automatically after transformation
         const mockTestAfter = {
-          test_statistic: -3.8,
-          p_value: 0.003,
+          test_statistic: -2.5 - (updatedTransforms.length * 0.5), // Improve with each transform
+          p_value: Math.max(0.001, 0.12 - (updatedTransforms.length * 0.04)),
           critical_values: { "1%": -3.43, "5%": -2.86, "10%": -2.57 },
-          is_stationary: true,
-          recommendation: "Data is now stationary after applying transformation(s).",
+          is_stationary: updatedTransforms.length >= 2, // Mock: stationary after 2 transforms
+          recommendation: updatedTransforms.length >= 2 
+            ? "Data is now stationary after transformation(s)." 
+            : "Consider adding another transformation to achieve stationarity.",
         };
-        setPostTransformTest(mockTestAfter);
+        setCurrentStationarityTest(mockTestAfter);
+        setIsStationary(mockTestAfter.is_stationary);
       }, 500);
     }
   };
 
   const removeTransformation = (index: number) => {
-    const updated = transformationChain.filter((_, i) => i !== index);
-    setTransformationChain(updated);
+    const updated = currentTransformations.filter((_, i) => i !== index);
+    setCurrentTransformations(updated);
     if (updated.length === 0) {
-      setPostTransformTest(null);
+      setCurrentStationarityTest(null);
       setBeforeTransformData([]);
       setAfterTransformData([]);
+      setIsStationary(false);
     }
   };
 
+  const saveTransformationForVariable = () => {
+    // Save current transformations for this variable
+    setSavedTransformations(prev => ({
+      ...prev,
+      [currentVariable]: currentTransformations
+    }));
+
+    // Reset current state
+    setCurrentTransformations([]);
+    setBeforeTransformData([]);
+    setAfterTransformData([]);
+    setCurrentStationarityTest(null);
+    setIsStationary(false);
+    setSelectedTransform("none");
+
+    // Move to next variable if available
+    const availableVars = getAvailableVariables();
+    const currentIndex = availableVars.indexOf(currentVariable);
+    if (currentIndex < availableVars.length - 1) {
+      setCurrentVariable(availableVars[currentIndex + 1]);
+    }
+  };
+
+  const resetCurrentVariable = () => {
+    setCurrentTransformations([]);
+    setBeforeTransformData([]);
+    setAfterTransformData([]);
+    setCurrentStationarityTest(null);
+    setIsStationary(false);
+    setSelectedTransform("none");
+  };
+
   const applyAllTransformations = () => {
-    if (transformationChain.length > 0) {
+    // Combine all saved transformations
+    const allTransforms = Object.entries(savedTransformations).flatMap(([variable, transforms]) =>
+      transforms.map(t => ({ ...t, variable }))
+    );
+    
+    if (allTransforms.length > 0) {
       onTransformationApply({ 
-        transformations: transformationChain, 
+        transformations: allTransforms, 
         applied: true 
       });
     }
@@ -433,67 +498,195 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
 
           <Separator />
 
-          {/* Section 4: Data Transformations */}
+          {/* Section 4: Data Transformations - Iterative Workflow */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              <h3 className="text-lg font-semibold">4. Data Transformations</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                <h3 className="text-lg font-semibold">4. Iterative Transformation Workflow</h3>
+              </div>
+              {isDependentProcessed() && (
+                <Badge variant="default" className="gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Dependent Variable Processed
+                </Badge>
+              )}
             </div>
             <p className="text-sm text-muted-foreground">
-              Apply transformations to achieve stationarity - see the visual impact immediately.
+              Transform one variable at a time until stationary - visualize each step before proceeding.
             </p>
 
-            <div className="space-y-2">
-              <Label>Apply To</Label>
-                  <Select value={selectedVariable} onValueChange={setSelectedVariable}>
+            {!isDependentProcessed() && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Start with the dependent variable first. Once it's stationary, you can process regressors.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Variable Selection & Status */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Variable Selection & Processing Status</CardTitle>
+                <CardDescription>Select a variable to transform</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Currently Working On</Label>
+                  <Select value={currentVariable} onValueChange={(val) => {
+                    if (currentTransformations.length > 0) {
+                      if (confirm("You have unsaved transformations. Switch variable anyway?")) {
+                        setCurrentVariable(val);
+                        resetCurrentVariable();
+                      }
+                    } else {
+                      setCurrentVariable(val);
+                    }
+                  }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="dependent">Dependent Variable ({valueColumn})</SelectItem>
-                      {regressors?.map(reg => (
-                        <SelectItem key={reg} value={reg}>Regressor: {reg}</SelectItem>
+                      {getAvailableVariables().map(variable => (
+                        <SelectItem key={variable} value={variable}>
+                          {variable === 'dependent' ? `Dependent Variable (${valueColumn})` : `Regressor: ${variable}`}
+                          {savedTransformations[variable] && ` ✓ (${savedTransformations[variable].length} transforms saved)`}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Select Transformation</Label>
-                  <div className="flex gap-2">
-                    <Select value={selectedTransform} onValueChange={setSelectedTransform}>
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Choose transformation..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="log">Log Transform</SelectItem>
-                        <SelectItem value="difference">First Difference</SelectItem>
-                        <SelectItem value="seasonal_difference">Seasonal Difference</SelectItem>
-                        <SelectItem value="box_cox">Box-Cox Transform</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {selectedTransform !== "none" && <TransformInfoButton type={selectedTransform} />}
+                {/* Processing Status Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {allVariables.map(variable => {
+                    const saved = savedTransformations[variable];
+                    const isCurrent = variable === currentVariable;
+                    return (
+                      <div 
+                        key={variable}
+                        className={`p-2 rounded-md border text-xs ${
+                          isCurrent ? 'border-primary bg-primary/5' :
+                          saved ? 'border-green-500 bg-green-500/5' :
+                          'border-muted bg-muted/50'
+                        }`}
+                      >
+                        <div className="font-medium truncate">{getVariableDisplayName(variable)}</div>
+                        <div className="text-muted-foreground">
+                          {isCurrent ? '← Working' : 
+                           saved ? `✓ ${saved.length} transforms` : 
+                           '○ Pending'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Current Variable Visualization - Before/During Transformation */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">
+                  {currentVariable === 'dependent' ? 'Dependent Variable' : 'Regressor'}: {getVariableDisplayName(currentVariable)}
+                </CardTitle>
+                <CardDescription>
+                  {currentTransformations.length === 0 
+                    ? 'Original data - apply transformations to achieve stationarity'
+                    : `After ${currentTransformations.length} transformation(s)`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {currentTransformations.length === 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={getTimeSeriesData(currentVariable)}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--popover))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '0.5rem',
+                        }}
+                      />
+                      <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <h5 className="text-xs font-semibold mb-2 text-muted-foreground">Before Transformation</h5>
+                      <ResponsiveContainer width="100%" height={150}>
+                        <LineChart data={beforeTransformData}>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis dataKey="date" tick={{ fontSize: 9 }} />
+                          <YAxis tick={{ fontSize: 9 }} />
+                          <Tooltip />
+                          <Line type="monotone" dataKey="value" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-semibold mb-2 text-muted-foreground">After Transformation(s)</h5>
+                      <ResponsiveContainer width="100%" height={150}>
+                        <LineChart data={afterTransformData}>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis dataKey="date" tick={{ fontSize: 9 }} />
+                          <YAxis tick={{ fontSize: 9 }} />
+                          <Tooltip />
+                          <Line type="monotone" dataKey="value" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Transformation Controls */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Add Transformation</CardTitle>
+                <CardDescription>Apply transformations one at a time and see immediate results</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Select value={selectedTransform} onValueChange={setSelectedTransform}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Choose transformation..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Select a transformation</SelectItem>
+                      <SelectItem value="log">Log Transform</SelectItem>
+                      <SelectItem value="difference">First Difference</SelectItem>
+                      <SelectItem value="seasonal_difference">Seasonal Difference</SelectItem>
+                      <SelectItem value="box_cox">Box-Cox Transform</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {selectedTransform !== "none" && <TransformInfoButton type={selectedTransform} />}
+                  <Button 
+                    onClick={addTransformation} 
+                    disabled={selectedTransform === "none"}
+                    variant="default"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Apply
+                  </Button>
                 </div>
 
-                {/* Transformation Chain */}
-                {transformationChain.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Transformation Chain</CardTitle>
-                      <CardDescription>Transformations will be applied in this order</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {transformationChain.map((transform, index) => (
+                {/* Current Transformation Chain */}
+                {currentTransformations.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-xs">Applied Transformations (in order)</Label>
+                    <div className="space-y-1">
+                      {currentTransformations.map((transform, index) => (
                         <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline">{index + 1}</Badge>
+                            <Badge variant="outline" className="text-xs">{index + 1}</Badge>
                             <span className="text-sm font-medium">
                               {getTransformationInfo(transform.type)?.name}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              → {transform.variable === "dependent" ? valueColumn : transform.variable}
                             </span>
                           </div>
                           <div className="flex items-center gap-1">
@@ -501,98 +694,22 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-8 w-8 p-0"
+                              className="h-7 w-7 p-0"
                               onClick={() => removeTransformation(index)}
                             >
-                              <X className="h-4 w-4" />
+                              <X className="h-3 w-3" />
                             </Button>
                           </div>
                         </div>
                       ))}
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
                 )}
 
-                <div className="flex gap-2">
-                  <Button 
-                    onClick={addTransformation} 
-                    disabled={selectedTransform === "none"}
-                    variant="outline"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add to Chain
-                  </Button>
-                  <Button 
-                    onClick={applyAllTransformations} 
-                    disabled={transformationChain.length === 0}
-                  >
-                    Apply All Transformations
-                  </Button>
-                  <Button 
-                    onClick={getAIInsights} 
-                    variant="outline"
-                    disabled={isAnalyzing}
-                  >
-                    <Wand2 className="mr-2 h-4 w-4" />
-                    AI Recommend
-                  </Button>
-                </div>
-
-                {/* Before/After Transformation Visualization */}
-                {beforeTransformData.length > 0 && afterTransformData.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Before vs After Transformation</CardTitle>
-                      <CardDescription>Visual comparison shows the transformation effect better than any statistic</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div>
-                        <h5 className="text-xs font-semibold mb-2 text-muted-foreground">Before Transformation</h5>
-                        <ResponsiveContainer width="100%" height={150}>
-                          <LineChart data={beforeTransformData}>
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                            <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                            <YAxis tick={{ fontSize: 10 }} />
-                            <Tooltip
-                              contentStyle={{
-                                backgroundColor: 'hsl(var(--popover))',
-                                border: '1px solid hsl(var(--border))',
-                                borderRadius: '0.5rem',
-                              }}
-                            />
-                            <Line type="monotone" dataKey="value" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div>
-                        <h5 className="text-xs font-semibold mb-2 text-muted-foreground">After Transformation</h5>
-                        <ResponsiveContainer width="100%" height={150}>
-                          <LineChart data={afterTransformData}>
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                            <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                            <YAxis tick={{ fontSize: 10 }} />
-                            <Tooltip
-                              contentStyle={{
-                                backgroundColor: 'hsl(var(--popover))',
-                                border: '1px solid hsl(var(--border))',
-                                borderRadius: '0.5rem',
-                              }}
-                            />
-                            <Line type="monotone" dataKey="value" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Look for: reduced trend, stabilized variance, more uniform behavior around a constant mean
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Post-Transformation Stationarity Test */}
-                {postTransformTest && (
-                  <Alert variant={postTransformTest.is_stationary ? "default" : "destructive"}>
-                    {postTransformTest.is_stationary ? (
+                {/* Stationarity Test Results After Transformation */}
+                {currentStationarityTest && (
+                  <Alert variant={currentStationarityTest.is_stationary ? "default" : "destructive"}>
+                    {currentStationarityTest.is_stationary ? (
                       <CheckCircle2 className="h-4 w-4" />
                     ) : (
                       <AlertCircle className="h-4 w-4" />
@@ -600,34 +717,112 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                     <AlertDescription>
                       <div className="space-y-2">
                         <p className="font-semibold">
-                          Post-Transformation Stationarity Test
+                          Stationarity Test Result
                         </p>
                         <p className="text-sm">
-                          {postTransformTest.is_stationary 
-                            ? "✓ Data is now stationary after transformation(s)" 
-                            : "⚠ Data still non-stationary - consider additional transformations"}
+                          {currentStationarityTest.is_stationary 
+                            ? "✓ Data is now stationary! You can save these transformations." 
+                            : "⚠ Data still non-stationary - add another transformation or save if satisfied."}
                         </p>
-                        <div className="text-sm space-y-1">
-                          <p>Test Statistic: {postTransformTest.test_statistic.toFixed(3)}</p>
-                          <p>P-value: {postTransformTest.p_value.toFixed(3)}</p>
+                        <div className="text-xs space-y-1">
+                          <p>Test Statistic: {currentStationarityTest.test_statistic.toFixed(3)}</p>
+                          <p>P-value: {currentStationarityTest.p_value.toFixed(3)}</p>
                         </div>
-                        <p className="text-sm mt-2 italic">
-                          💡 Compare the before/after charts above - if the transformed data looks more stable with constant mean and variance, you're on the right track.
-                        </p>
                       </div>
                     </AlertDescription>
                   </Alert>
                 )}
 
+                {/* Action Buttons */}
+                <div className="flex gap-2 flex-wrap">
+                  <Button 
+                    onClick={saveTransformationForVariable}
+                    disabled={currentTransformations.length === 0}
+                    variant="default"
+                    className="flex-1"
+                  >
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    Save & Move to Next Variable
+                  </Button>
+                  <Button 
+                    onClick={resetCurrentVariable}
+                    disabled={currentTransformations.length === 0}
+                    variant="outline"
+                  >
+                    Reset
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Comparison View: Dependent vs Regressors */}
+            {Object.keys(savedTransformations).length > 1 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Multi-Variable Comparison</CardTitle>
+                  <CardDescription>Visual comparison of transformed variables</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      {Object.keys(savedTransformations).map((variable, index) => {
+                        const varData = getTimeSeriesData(variable);
+                        const colors = ['hsl(var(--primary))', 'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
+                        return (
+                          <Line 
+                            key={variable}
+                            data={varData}
+                            type="monotone" 
+                            dataKey="value" 
+                            name={getVariableDisplayName(variable)}
+                            stroke={colors[index % colors.length]} 
+                            strokeWidth={1.5}
+                            dot={false}
+                          />
+                        );
+                      })}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Final Apply All Button */}
+            {Object.keys(savedTransformations).length > 0 && (
+              <Alert>
+                <TrendingUp className="h-4 w-4" />
+                <AlertDescription className="space-y-3">
+                  <div>
+                    <p className="font-semibold mb-1">Ready to Apply Transformations</p>
+                    <p className="text-sm">
+                      You have configured transformations for {Object.keys(savedTransformations).length} variable(s). 
+                      Click below to apply all transformations to your model.
+                    </p>
+                  </div>
+                  <Button 
+                    onClick={applyAllTransformations}
+                    className="w-full"
+                  >
+                    Apply All Transformations to Model
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
             <Alert>
-              <TrendingUp className="h-4 w-4" />
+              <Info className="h-4 w-4" />
               <AlertDescription>
-                <p className="font-semibold mb-2">Transformation Tips:</p>
+                <p className="font-semibold mb-2">Iterative Transformation Workflow:</p>
                 <ul className="text-sm space-y-1 list-disc list-inside">
-                  <li>You can apply multiple transformations sequentially</li>
-                  <li>For trending + heteroskedastic data: apply log first, then difference</li>
-                  <li>Stationarity is automatically tested after each transformation</li>
-                  <li>Click the info button next to each transform for detailed guidance</li>
+                  <li>Select a transformation and click "Apply" to see immediate results</li>
+                  <li>Add more transformations iteratively until data is stationary</li>
+                  <li>Click "Save & Move to Next" when satisfied with the variable</li>
+                  <li>Process dependent variable first, then move to regressors</li>
+                  <li>Visual comparison is more reliable than any statistical test</li>
                 </ul>
               </AlertDescription>
             </Alert>
