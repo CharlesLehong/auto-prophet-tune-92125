@@ -687,48 +687,189 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
 
                   {/* ACF/PACF Charts */}
                   {currentState.acfData && currentState.pacfData && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <Card className="bg-muted/50">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-xs">ACF (Autocorrelation)</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <ResponsiveContainer width="100%" height={120}>
-                            <BarChart data={currentState.acfData.lags.map((lag: number, i: number) => ({
-                              lag,
-                              correlation: currentState.acfData.correlations[i]
-                            }))}>
-                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                              <XAxis dataKey="lag" tick={{ fontSize: 8 }} />
-                              <YAxis domain={[-1, 1]} tick={{ fontSize: 8 }} />
-                              <Tooltip />
-                              <ReferenceLine y={currentState.acfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
-                              <ReferenceLine y={-currentState.acfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
-                              <Bar dataKey="correlation" fill="hsl(var(--primary))" />
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </CardContent>
-                      </Card>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <Card className="bg-muted/50">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-xs">ACF (Autocorrelation)</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <ResponsiveContainer width="100%" height={120}>
+                              <BarChart data={currentState.acfData.lags.map((lag: number, i: number) => ({
+                                lag,
+                                correlation: currentState.acfData.correlations[i]
+                              }))}>
+                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                <XAxis dataKey="lag" tick={{ fontSize: 8 }} />
+                                <YAxis domain={[-1, 1]} tick={{ fontSize: 8 }} />
+                                <Tooltip />
+                                <ReferenceLine y={currentState.acfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                                <ReferenceLine y={-currentState.acfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                                <Bar dataKey="correlation" fill="hsl(var(--primary))" />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </CardContent>
+                        </Card>
 
-                      <Card className="bg-muted/50">
+                        <Card className="bg-muted/50">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-xs">PACF (Partial Autocorrelation)</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <ResponsiveContainer width="100%" height={120}>
+                              <BarChart data={currentState.pacfData.lags.map((lag: number, i: number) => ({
+                                lag,
+                                correlation: currentState.pacfData.correlations[i]
+                              }))}>
+                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                <XAxis dataKey="lag" tick={{ fontSize: 8 }} />
+                                <YAxis domain={[-1, 1]} tick={{ fontSize: 8 }} />
+                                <Tooltip />
+                                <ReferenceLine y={currentState.pacfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                                <ReferenceLine y={-currentState.pacfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                                <Bar dataKey="correlation" fill="hsl(var(--chart-2))" />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      {/* Interpretation Commentary */}
+                      <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
                         <CardHeader className="pb-2">
-                          <CardTitle className="text-xs">PACF (Partial Autocorrelation)</CardTitle>
+                          <CardTitle className="text-xs flex items-center gap-2">
+                            <BarChart3 className="h-4 w-4" />
+                            Time Series Process Identification
+                          </CardTitle>
                         </CardHeader>
-                        <CardContent>
-                          <ResponsiveContainer width="100%" height={120}>
-                            <BarChart data={currentState.pacfData.lags.map((lag: number, i: number) => ({
-                              lag,
-                              correlation: currentState.pacfData.correlations[i]
-                            }))}>
-                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                              <XAxis dataKey="lag" tick={{ fontSize: 8 }} />
-                              <YAxis domain={[-1, 1]} tick={{ fontSize: 8 }} />
-                              <Tooltip />
-                              <ReferenceLine y={currentState.pacfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
-                              <ReferenceLine y={-currentState.pacfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
-                              <Bar dataKey="correlation" fill="hsl(var(--chart-2))" />
-                            </BarChart>
-                          </ResponsiveContainer>
+                        <CardContent className="space-y-3 text-xs">
+                          {(() => {
+                            const acf = currentState.acfData.correlations.slice(1);
+                            const pacf = currentState.pacfData.correlations.slice(1);
+                            const ci = currentState.acfData.confidence_interval;
+                            
+                            // Count significant lags
+                            const significantACF = acf.filter((v: number) => Math.abs(v) > ci).length;
+                            const significantPACF = pacf.filter((v: number) => Math.abs(v) > ci).length;
+                            
+                            // Find where PACF cuts off (first 3 lags)
+                            let pacfCutoff = 0;
+                            for (let i = 0; i < Math.min(3, pacf.length); i++) {
+                              if (Math.abs(pacf[i]) > ci) pacfCutoff = i + 1;
+                              else break;
+                            }
+                            
+                            // Find where ACF cuts off
+                            let acfCutoff = 0;
+                            for (let i = 0; i < Math.min(3, acf.length); i++) {
+                              if (Math.abs(acf[i]) > ci) acfCutoff = i + 1;
+                              else break;
+                            }
+                            
+                            // Check for exponential decay in ACF
+                            const acfDecay = acf.length > 2 ? 
+                              Math.abs(acf[1]) > Math.abs(acf[2]) && Math.abs(acf[2]) > Math.abs(acf[3] || 0) : false;
+                            
+                            // Mean reversion check (PACF at lag 1 negative and significant)
+                            const meanReversion = pacf[0] < -ci;
+                            
+                            // Determine process type
+                            let processType = "";
+                            let modelRecommendation = "";
+                            
+                            if (pacfCutoff > 0 && acfDecay) {
+                              processType = `AR(${pacfCutoff}) - Autoregressive Process`;
+                              modelRecommendation = `ARIMA(${pacfCutoff},0,0) or AR(${pacfCutoff}) model`;
+                            } else if (acfCutoff > 0 && significantPACF > 3) {
+                              processType = `MA(${acfCutoff}) - Moving Average Process`;
+                              modelRecommendation = `ARIMA(0,0,${acfCutoff}) or MA(${acfCutoff}) model`;
+                            } else if (pacfCutoff > 0 && acfCutoff > 0) {
+                              processType = `ARMA(${pacfCutoff},${acfCutoff}) - Mixed Process`;
+                              modelRecommendation = `ARIMA(${pacfCutoff},0,${acfCutoff}) or ARMA model`;
+                            } else if (significantACF < 2 && significantPACF < 2) {
+                              processType = "White Noise - No significant autocorrelation";
+                              modelRecommendation = "No time series model needed - data is already stationary";
+                            } else {
+                              processType = "Complex pattern detected";
+                              modelRecommendation = "ARIMA(p,d,q) with automatic order selection or seasonal SARIMA";
+                            }
+                            
+                            return (
+                              <>
+                                <div className="space-y-2">
+                                  <div className="flex items-start gap-2">
+                                    <Badge variant="outline" className="mt-0.5">Process</Badge>
+                                    <div className="flex-1">
+                                      <div className="font-semibold">{processType}</div>
+                                      <div className="text-muted-foreground mt-1">
+                                        {significantACF} significant ACF lags, {significantPACF} significant PACF lags
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <Separator />
+
+                                  <div className="flex items-start gap-2">
+                                    <Badge variant="outline" className="mt-0.5">ACF Pattern</Badge>
+                                    <div className="flex-1">
+                                      {acfDecay ? (
+                                        "Exponential decay suggests AR component"
+                                      ) : acfCutoff > 0 ? (
+                                        `Cuts off after lag ${acfCutoff} suggests MA component`
+                                      ) : (
+                                        "No clear pattern - may indicate white noise or complex structure"
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-start gap-2">
+                                    <Badge variant="outline" className="mt-0.5">PACF Pattern</Badge>
+                                    <div className="flex-1">
+                                      {pacfCutoff > 0 ? (
+                                        `Cuts off after lag ${pacfCutoff} indicates AR(${pacfCutoff}) process`
+                                      ) : (
+                                        "Gradual decay suggests MA component or no clear AR structure"
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <Separator />
+
+                                  <div className="flex items-start gap-2">
+                                    <Badge variant={meanReversion ? "default" : "outline"} className="mt-0.5">
+                                      Mean Reversion
+                                    </Badge>
+                                    <div className="flex-1">
+                                      {meanReversion ? (
+                                        <span className="text-green-600 dark:text-green-400 font-medium">
+                                          ✓ Detected - Negative PACF(1) indicates strong mean-reverting behavior
+                                        </span>
+                                      ) : (
+                                        <span>
+                                          No strong mean reversion detected at lag 1
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <Separator />
+
+                                  <div className="bg-primary/10 p-2 rounded border border-primary/20">
+                                    <div className="font-semibold mb-1 flex items-center gap-1">
+                                      <Info className="h-3 w-3" />
+                                      Recommended Models:
+                                    </div>
+                                    <div>{modelRecommendation}</div>
+                                    {currentState.stationarityTest?.is_stationary === false && (
+                                      <div className="mt-1 text-orange-600 dark:text-orange-400">
+                                        Note: Data is non-stationary. Consider ARIMA with differencing (d=1 or d=2)
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </CardContent>
                       </Card>
                     </div>
