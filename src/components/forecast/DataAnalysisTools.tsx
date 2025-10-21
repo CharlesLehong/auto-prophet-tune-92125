@@ -288,7 +288,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
             Let AI analyze all variables and suggest optimal transformations automatically
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <Button 
             onClick={runAIAnalysis} 
             disabled={isAIAnalyzing}
@@ -307,6 +307,35 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
               </>
             )}
           </Button>
+
+          {/* Workflow Status */}
+          {Object.keys(variableStates).length > 0 && (
+            <div className="space-y-2 pt-2 border-t">
+              <div className="text-sm font-semibold">Workflow Progress:</div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-blue-500/10 border-blue-500">
+                    {Object.values(variableStates).filter(s => s.status === 'analyzing').length}
+                  </Badge>
+                  <span>Awaiting review</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-green-500/10 border-green-500">
+                    {Object.values(variableStates).filter(s => s.status === 'transformed').length}
+                  </Badge>
+                  <span>Completed</span>
+                </div>
+              </div>
+              <Alert className="mt-2">
+                <Info className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  <strong>Next steps:</strong> Click on each variable card to review AI recommendations, 
+                  add/modify transformations, and save. Statistical tests (ADF, ACF, PACF, correlation) 
+                  run automatically when you apply transformations.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -347,10 +376,10 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                   </div>
                   <div className="font-medium text-sm truncate">{getVariableDisplayName(variable)}</div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    {state.status === 'pending' && 'Not analyzed'}
-                    {state.status === 'analyzing' && `${state.transformations.length} transforms`}
-                    {state.status === 'transformed' && `✓ ${state.transformations.length} applied`}
-                    {state.status === 'archived' && 'Archived'}
+                    {state.status === 'pending' && '⚠️ Not analyzed'}
+                    {state.status === 'analyzing' && `📋 ${state.transformations.length} AI suggestions`}
+                    {state.status === 'transformed' && `✅ ${state.transformations.length} transforms + stats`}
+                    {state.status === 'archived' && '📦 Archived'}
                   </div>
                 </button>
               );
@@ -700,18 +729,54 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
 
       {/* Apply All Button */}
       {Object.values(variableStates).some(s => s.status === 'transformed') && (
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="border-2 border-primary">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              Ready to Apply Transformations
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="text-center p-2 bg-green-500/10 rounded">
+                <div className="font-bold text-lg">{Object.values(variableStates).filter(s => s.status === 'transformed').length}</div>
+                <div className="text-muted-foreground">Completed</div>
+              </div>
+              <div className="text-center p-2 bg-blue-500/10 rounded">
+                <div className="font-bold text-lg">{Object.values(variableStates).filter(s => s.status === 'analyzing').length}</div>
+                <div className="text-muted-foreground">Pending</div>
+              </div>
+              <div className="text-center p-2 bg-orange-500/10 rounded">
+                <div className="font-bold text-lg">{Object.values(variableStates).filter(s => s.status === 'archived').length}</div>
+                <div className="text-muted-foreground">Archived</div>
+              </div>
+            </div>
+            
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                {Object.values(variableStates).filter(s => s.status === 'analyzing').length > 0 ? (
+                  <>
+                    <strong>Note:</strong> {Object.values(variableStates).filter(s => s.status === 'analyzing').length} variable(s) 
+                    still need review. You can proceed now or complete all variables first.
+                  </>
+                ) : (
+                  <>
+                    <strong>All variables reviewed!</strong> All transformations have been saved with complete 
+                    statistical analysis (ADF, ACF, PACF, and correlations).
+                  </>
+                )}
+              </AlertDescription>
+            </Alert>
+
             <Button 
               onClick={applyAllTransformations}
               size="lg"
               className="w-full"
             >
+              <CheckCircle2 className="mr-2 h-4 w-4" />
               Apply All Transformations to Model
             </Button>
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              {Object.values(variableStates).filter(s => s.status === 'transformed').length} variable(s) ready
-            </p>
           </CardContent>
         </Card>
       )}
