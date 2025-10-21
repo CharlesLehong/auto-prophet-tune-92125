@@ -32,9 +32,9 @@ export interface SegmentConfig {
   regressors: Regressor[];
   forecast_periods: number;
   frequency: string;
-  exclude_recent: number;
-  start_row: number;
-  end_row: number;
+  total_records: number;
+  training_records: number;
+  test_records: number; // Number of recent records to exclude for testing
 }
 
 export interface ForecastConfig {

@@ -1,35 +1,61 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, X, Target } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Plus, X, Target, Calendar, TrendingUp } from "lucide-react";
 import type { SegmentConfig } from "@/types/forecast";
+import { analyzeSegmentData, getFrequencyName, calculateMonthsObservable } from "@/utils/dataAnalysis";
 
 interface SegmentMapperProps {
   availableSegmentValues: string[];
   segments: SegmentConfig[];
   onSegmentsChange: (segments: SegmentConfig[]) => void;
+  csvData: any[];
+  segmentColumn: string;
+  dateColumn: string;
 }
 
-export const SegmentMapper = ({ availableSegmentValues, segments, onSegmentsChange }: SegmentMapperProps) => {
+export const SegmentMapper = ({ 
+  availableSegmentValues, 
+  segments, 
+  onSegmentsChange,
+  csvData,
+  segmentColumn,
+  dateColumn 
+}: SegmentMapperProps) => {
   const [selectedSegmentValue, setSelectedSegmentValue] = useState("");
+  const [segmentAnalysis, setSegmentAnalysis] = useState<Map<string, any>>(new Map());
+
+  // Analyze data when segments or data changes
+  useEffect(() => {
+    const analysis = new Map();
+    segments.forEach(segment => {
+      const result = analyzeSegmentData(csvData, segmentColumn, segment.segmentValue, dateColumn);
+      analysis.set(segment.segmentValue, result);
+    });
+    setSegmentAnalysis(analysis);
+  }, [segments, csvData, segmentColumn, dateColumn]);
 
   const addSegment = () => {
     if (selectedSegmentValue && !segments.find((s) => s.segmentValue === selectedSegmentValue)) {
+      const analysis = analyzeSegmentData(csvData, segmentColumn, selectedSegmentValue, dateColumn);
+      const defaultTraining = Math.max(1, Math.floor(analysis.totalRecords * 0.9)); // Default 90% for training
+      
       onSegmentsChange([
         ...segments,
         {
           segment: selectedSegmentValue,
           segmentValue: selectedSegmentValue,
           regressors: [],
-          forecast_periods: 12,
-          frequency: 'MS',
-          exclude_recent: 0,
-          start_row: 1,
-          end_row: 1000,
+          forecast_periods: 24,
+          frequency: analysis.detectedFrequency,
+          total_records: analysis.totalRecords,
+          training_records: defaultTraining,
+          test_records: analysis.totalRecords - defaultTraining,
         },
       ]);
       setSelectedSegmentValue("");
@@ -85,109 +111,154 @@ export const SegmentMapper = ({ availableSegmentValues, segments, onSegmentsChan
           </div>
         ) : (
           <div className="space-y-4">
-            {segments.map((segment) => (
-              <Card key={segment.segment} className="p-4">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="default" className="text-sm">
-                        {segment.segment}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {segment.regressors.length} regressors configured
-                      </span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeSegment(segment.segment)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+            {segments.map((segment) => {
+              const analysis = segmentAnalysis.get(segment.segmentValue);
+              const monthsObservable = analysis 
+                ? calculateMonthsObservable(analysis.firstDate, analysis.lastDate, segment.frequency)
+                : 0;
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-xs">Forecast Periods</Label>
-                      <Input
-                        type="number"
-                        value={segment.forecast_periods}
-                        onChange={(e) =>
-                          updateSegment(segment.segment, {
-                            forecast_periods: parseInt(e.target.value) || 12,
-                          })
-                        }
-                        min={1}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs">Frequency</Label>
-                      <Select
-                        value={segment.frequency}
-                        onValueChange={(v) => updateSegment(segment.segment, { frequency: v })}
+              return (
+                <Card key={segment.segment} className="p-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="default" className="text-sm">
+                          {segment.segment}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {segment.regressors.length} regressors
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeSegment(segment.segment)}
                       >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover">
-                          <SelectItem value="D">Daily</SelectItem>
-                          <SelectItem value="W">Weekly</SelectItem>
-                          <SelectItem value="MS">Monthly</SelectItem>
-                          <SelectItem value="QS">Quarterly</SelectItem>
-                          <SelectItem value="YS">Yearly</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label className="text-xs">Exclude Recent</Label>
-                      <Input
-                        type="number"
-                        value={segment.exclude_recent}
-                        onChange={(e) =>
-                          updateSegment(segment.segment, {
-                            exclude_recent: parseInt(e.target.value) || 0,
-                          })
-                        }
-                        min={0}
-                      />
+                    {/* Data Summary */}
+                    <div className="grid grid-cols-3 gap-4 p-3 bg-muted/50 rounded-lg">
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Total Records</div>
+                        <div className="text-lg font-semibold">{segment.total_records}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          Months Observable
+                        </div>
+                        <div className="text-lg font-semibold">{monthsObservable}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Frequency</div>
+                        <div className="text-sm font-medium">{getFrequencyName(segment.frequency)}</div>
+                      </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label className="text-xs">Data Range</Label>
-                      <div className="flex gap-1">
-                        <Input
-                          type="number"
-                          placeholder="Start"
-                          value={segment.start_row}
-                          onChange={(e) =>
+                    {/* Date Range */}
+                    {analysis && (
+                      <div className="text-xs text-muted-foreground">
+                        Data from {analysis.firstDate?.toLocaleDateString()} to {analysis.lastDate?.toLocaleDateString()}
+                      </div>
+                    )}
+
+                    {/* Training/Testing Split */}
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <Label className="text-sm">Training Records: {segment.training_records}</Label>
+                          <span className="text-xs text-muted-foreground">
+                            ({Math.round((segment.training_records / segment.total_records) * 100)}% of data)
+                          </span>
+                        </div>
+                        <Slider
+                          value={[segment.training_records]}
+                          onValueChange={([v]) =>
                             updateSegment(segment.segment, {
-                              start_row: parseInt(e.target.value) || 1,
+                              training_records: v,
+                              test_records: segment.total_records - v,
                             })
                           }
-                          className="w-16 text-xs"
                           min={1}
+                          max={segment.total_records}
+                          step={1}
+                          className="py-2"
                         />
-                        <span className="self-center text-xs">-</span>
-                        <Input
-                          type="number"
-                          placeholder="End"
-                          value={segment.end_row}
-                          onChange={(e) =>
-                            updateSegment(segment.segment, {
-                              end_row: parseInt(e.target.value) || 100,
-                            })
-                          }
-                          className="w-16 text-xs"
-                          min={1}
-                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>1</span>
+                          <span>{segment.total_records}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs flex items-center gap-1">
+                            <TrendingUp className="h-3 w-3" />
+                            Test Records (Holdout)
+                          </Label>
+                          <Input
+                            type="number"
+                            value={segment.test_records}
+                            onChange={(e) => {
+                              const testRecords = parseInt(e.target.value) || 0;
+                              updateSegment(segment.segment, {
+                                test_records: Math.min(testRecords, segment.total_records - 1),
+                                training_records: segment.total_records - Math.min(testRecords, segment.total_records - 1),
+                              });
+                            }}
+                            min={0}
+                            max={segment.total_records - 1}
+                          />
+                          <div className="text-xs text-muted-foreground">
+                            Last {segment.test_records} records for validation
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Forecast Periods</Label>
+                          <Input
+                            type="number"
+                            value={segment.forecast_periods}
+                            onChange={(e) =>
+                              updateSegment(segment.segment, {
+                                forecast_periods: parseInt(e.target.value) || 12,
+                              })
+                            }
+                            min={1}
+                          />
+                          <div className="text-xs text-muted-foreground">
+                            Forecast {segment.forecast_periods} {getFrequencyName(segment.frequency).toLowerCase()} periods
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Frequency Override */}
+                      <div className="space-y-2">
+                        <Label className="text-xs">Override Frequency (Optional)</Label>
+                        <Select
+                          value={segment.frequency}
+                          onValueChange={(v) => updateSegment(segment.segment, { frequency: v })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover">
+                            <SelectItem value="D">Daily</SelectItem>
+                            <SelectItem value="W">Weekly</SelectItem>
+                            <SelectItem value="SMS">Semi-Monthly</SelectItem>
+                            <SelectItem value="MS">Monthly</SelectItem>
+                            <SelectItem value="QS">Quarterly</SelectItem>
+                            <SelectItem value="YS">Yearly</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
         )}
       </CardContent>

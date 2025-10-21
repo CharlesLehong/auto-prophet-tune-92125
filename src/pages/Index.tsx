@@ -101,8 +101,13 @@ const Index = () => {
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
       
-      // Filter data for this segment
-      const segmentData = csvData.filter(row => row[segmentColumn] === segment.segmentValue);
+      // Filter and sort data for this segment
+      const segmentData = csvData
+        .filter(row => row[segmentColumn] === segment.segmentValue)
+        .sort((a, b) => new Date(a[dateColumn]).getTime() - new Date(b[dateColumn]).getTime());
+      
+      const trainingData = segmentData.slice(0, segment.training_records);
+      const testData = segmentData.slice(segment.training_records, segment.training_records + segment.test_records);
       
       // Update status to running
       setSegmentProgress(prev => 
@@ -111,7 +116,7 @@ const Index = () => {
             ...p, 
             status: 'running', 
             progress: 0, 
-            message: `Filtering data: ${segmentData.length} rows found` 
+            message: `Using ${trainingData.length} records for training, ${testData.length} for testing` 
           } : p
         )
       );
@@ -120,10 +125,10 @@ const Index = () => {
 
       // Simulate model training stages
       const stages = [
-        { progress: 25, message: `Preparing ${segmentData.length} data points...` },
-        { progress: 50, message: 'Training model with regressors...' },
+        { progress: 25, message: `Training on ${trainingData.length} records...` },
+        { progress: 50, message: `Validating on ${testData.length} test records...` },
         { progress: 75, message: 'Cross-validation...' },
-        { progress: 90, message: 'Generating forecasts...' },
+        { progress: 90, message: `Forecasting ${segment.forecast_periods} periods...` },
         { progress: 100, message: 'Complete' },
       ];
 
@@ -146,7 +151,11 @@ const Index = () => {
       console.log(`Completed forecast for segment: ${segment.segment}`, {
         model: selectedModel,
         segmentValue: segment.segmentValue,
-        dataPoints: segmentData.length,
+        totalRecords: segmentData.length,
+        trainingRecords: trainingData.length,
+        testRecords: testData.length,
+        forecastPeriods: segment.forecast_periods,
+        frequency: segment.frequency,
         config: segment,
         parameters: selectedModel === 'prophet' ? prophetParams : null,
       });
@@ -231,6 +240,9 @@ const Index = () => {
               availableSegmentValues={uniqueSegmentValues as string[]}
               segments={segments}
               onSegmentsChange={setSegments}
+              csvData={csvData}
+              segmentColumn={segmentColumn}
+              dateColumn={dateColumn}
             />
             <div className="flex justify-end">
               <Button onClick={() => setActiveTab("regressors")} disabled={segments.length === 0}>
