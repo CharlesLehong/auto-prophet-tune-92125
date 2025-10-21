@@ -1,14 +1,14 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Bar, BarChart } from "recharts";
-import { Activity, TrendingUp, Wand2, AlertCircle, CheckCircle2, Info, Plus, X } from "lucide-react";
+import { Activity, TrendingUp, Wand2, AlertCircle, CheckCircle2, Info, Plus, X, BarChart3 } from "lucide-react";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import { getTransformationInfo } from "@/utils/dataAnalysis";
 
 interface DataAnalysisToolsProps {
@@ -199,315 +199,252 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-primary" />
-            Time Series Analysis Tools
+            Time Series Analysis Dashboard
           </CardTitle>
           <CardDescription>
-            Analyze data properties and apply transformations for better forecasting
+            Comprehensive data analysis workflow - visualize, test, and transform your time series
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="stationarity" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="stationarity">Stationarity</TabsTrigger>
-              <TabsTrigger value="acf">ACF</TabsTrigger>
-              <TabsTrigger value="pacf">PACF</TabsTrigger>
-              <TabsTrigger value="transform">Transform</TabsTrigger>
-            </TabsList>
+        <CardContent className="space-y-8">
+          
+          {/* Section 1: Variable Selection & Visualization */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold">1. Data Visualization & Variable Selection</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Start by visualizing your data - a modeler who doesn't look at their data is looking for problems.
+            </p>
+            <div className="space-y-2">
+              <Label>Select Variable to Analyze</Label>
+              <Select value={stationarityVariable} onValueChange={(val) => {
+                setStationarityVariable(val);
+                setAcfVariable(val);
+                setPacfVariable(val);
+              }}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="dependent">Dependent Variable ({valueColumn})</SelectItem>
+                  {regressors?.map(reg => (
+                    <SelectItem key={reg} value={reg}>Regressor: {reg}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <TabsContent value="stationarity" className="space-y-4">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Select Variable to Test</Label>
-                  <Select value={stationarityVariable} onValueChange={setStationarityVariable}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dependent">Dependent Variable ({valueColumn})</SelectItem>
-                      {regressors?.map(reg => (
-                        <SelectItem key={reg} value={reg}>Regressor: {reg}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+            {/* Time Series Visualization */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Time Series: {stationarityVariable === "dependent" ? valueColumn : stationarityVariable}</CardTitle>
+                <CardDescription>Visual inspection is the foundation of good modeling - always look at your data first</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={250}>
+                  <LineChart data={getTimeSeriesData(stationarityVariable)}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 12 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--popover))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '0.5rem',
+                      }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="value" 
+                      stroke="hsl(var(--primary))" 
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Look for: trends (upward/downward movement), seasonality (repeating patterns), variance changes (heteroskedasticity)
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-                {/* Time Series Visualization */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Time Series: {stationarityVariable === "dependent" ? valueColumn : stationarityVariable}</CardTitle>
-                    <CardDescription>Visual inspection is the foundation of good modeling - always look at your data first</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <LineChart data={getTimeSeriesData(stationarityVariable)}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis 
-                          dataKey="date" 
-                          tick={{ fontSize: 12 }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={60}
-                        />
-                        <YAxis tick={{ fontSize: 12 }} />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--popover))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '0.5rem',
-                          }}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="value" 
-                          stroke="hsl(var(--primary))" 
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Look for: trends (upward/downward movement), seasonality (repeating patterns), variance changes (heteroskedasticity)
+          <Separator />
+
+          {/* Section 2: Stationarity Testing */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold">2. Stationarity Test (ADF)</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Test whether your data is stationary - statistical confirmation of what you see visually.
+            </p>
+            
+            <div className="flex gap-2">
+              <Button onClick={runStationarityTest} variant="outline">
+                Run Augmented Dickey-Fuller Test
+              </Button>
+              <Button onClick={getAIInsights} variant="outline" disabled={isAnalyzing}>
+                <Wand2 className="mr-2 h-4 w-4" />
+                {isAnalyzing ? "Analyzing..." : "Get AI Insights"}
+              </Button>
+            </div>
+
+            {stationarityTest && (
+              <Alert variant={stationarityTest.is_stationary ? "default" : "destructive"}>
+                {stationarityTest.is_stationary ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                <AlertDescription>
+                  <div className="space-y-2">
+                    <p className="font-semibold">
+                      {stationarityTest.is_stationary ? "Data is stationary" : "Data is non-stationary"}
                     </p>
-                  </CardContent>
-                </Card>
-
-                <div className="flex gap-2">
-                  <Button onClick={runStationarityTest} variant="outline">
-                    Run Augmented Dickey-Fuller Test
-                  </Button>
-                  <Button onClick={getAIInsights} variant="outline" disabled={isAnalyzing}>
-                    <Wand2 className="mr-2 h-4 w-4" />
-                    {isAnalyzing ? "Analyzing..." : "Get AI Insights"}
-                  </Button>
-                </div>
-              </div>
-
-              {stationarityTest && (
-                <Alert variant={stationarityTest.is_stationary ? "default" : "destructive"}>
-                  {stationarityTest.is_stationary ? (
-                    <CheckCircle2 className="h-4 w-4" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4" />
-                  )}
-                  <AlertDescription>
-                    <div className="space-y-2">
-                      <p className="font-semibold">
-                        {stationarityTest.is_stationary ? "Data is stationary" : "Data is non-stationary"}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Variable: <Badge variant="outline">{stationarityTest.variable}</Badge>
-                      </p>
-                      <div className="text-sm space-y-1">
-                        <p>Test Statistic: {stationarityTest.test_statistic.toFixed(3)}</p>
-                        <p>P-value: {stationarityTest.p_value.toFixed(3)}</p>
-                        <p>Critical Values: 1%={stationarityTest.critical_values["1%"]}, 5%={stationarityTest.critical_values["5%"]}, 10%={stationarityTest.critical_values["10%"]}</p>
-                      </div>
-                      <p className="text-sm mt-2 italic">
-                        💡 Remember: Statistical tests confirm what you should see visually. If the chart shows clear trends or changing variance, the data is likely non-stationary.
-                      </p>
-                      <p className="text-sm mt-2">{stationarityTest.recommendation}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Variable: <Badge variant="outline">{stationarityTest.variable}</Badge>
+                    </p>
+                    <div className="text-sm space-y-1">
+                      <p>Test Statistic: {stationarityTest.test_statistic.toFixed(3)}</p>
+                      <p>P-value: {stationarityTest.p_value.toFixed(3)}</p>
+                      <p>Critical Values: 1%={stationarityTest.critical_values["1%"]}, 5%={stationarityTest.critical_values["5%"]}, 10%={stationarityTest.critical_values["10%"]}</p>
                     </div>
-                  </AlertDescription>
-                </Alert>
-              )}
+                    <p className="text-sm mt-2 italic">
+                      💡 Remember: Statistical tests confirm what you should see visually. If the chart shows clear trends or changing variance, the data is likely non-stationary.
+                    </p>
+                    <p className="text-sm mt-2">{stationarityTest.recommendation}</p>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
 
-              {aiInsights && (
-                <Card className="bg-primary/5 border-primary/20">
-                  <CardHeader>
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Wand2 className="h-4 w-4" />
-                      AI-Powered Insights
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm whitespace-pre-line">{aiInsights}</p>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
+            {aiInsights && (
+              <Card className="bg-primary/5 border-primary/20">
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Wand2 className="h-4 w-4" />
+                    AI-Powered Insights
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm whitespace-pre-line">{aiInsights}</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
 
-            <TabsContent value="acf" className="space-y-4">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Select Variable to Analyze</Label>
-                  <Select value={acfVariable} onValueChange={setAcfVariable}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dependent">Dependent Variable ({valueColumn})</SelectItem>
-                      {regressors?.map(reg => (
-                        <SelectItem key={reg} value={reg}>Regressor: {reg}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+          <Separator />
 
-                {/* Time Series Visualization */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Time Series: {acfVariable === "dependent" ? valueColumn : acfVariable}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <LineChart data={getTimeSeriesData(acfVariable)}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis 
-                          dataKey="date" 
-                          tick={{ fontSize: 12 }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={60}
-                        />
-                        <YAxis tick={{ fontSize: 12 }} />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--popover))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '0.5rem',
-                          }}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="value" 
-                          stroke="hsl(var(--chart-2))" 
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
+          {/* Section 3: ACF & PACF Analysis */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold">3. Autocorrelation Analysis (ACF & PACF)</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Understand temporal dependencies in your data - helps identify appropriate model orders.
+            </p>
+            <div className="flex gap-2">
+              <Button onClick={calculateACF} variant="outline">
+                Calculate ACF
+              </Button>
+              <Button onClick={calculatePACF} variant="outline">
+                Calculate PACF
+              </Button>
+            </div>
 
-                <Button onClick={calculateACF} variant="outline">
-                  Calculate Autocorrelation Function
-                </Button>
-              </div>
-
-              {acfData && (
-                <div>
-                  <div className="flex items-center gap-2 mb-4">
+            {acfData && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
                     <h4 className="text-sm font-semibold">Autocorrelation Function (ACF)</h4>
                     <Badge variant="outline">{acfData.variable}</Badge>
                   </div>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={acfData.data}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis dataKey="lag" label={{ value: "Lag", position: "insideBottom", offset: -5 }} />
-                      <YAxis label={{ value: "Correlation", angle: -90, position: "insideLeft" }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(var(--popover))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '0.5rem',
-                        }}
-                      />
-                      <ReferenceLine y={acfData.confidence} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
-                      <ReferenceLine y={-acfData.confidence} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
-                      <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" />
-                      <Bar dataKey="correlation" fill="hsl(var(--primary))" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Blue dashed lines represent 95% confidence intervals. Bars extending beyond these lines indicate significant autocorrelation.
-                  </p>
-                </div>
-              )}
-            </TabsContent>
+                </CardHeader>
+                <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={acfData.data}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="lag" label={{ value: "Lag", position: "insideBottom", offset: -5 }} />
+                    <YAxis label={{ value: "Correlation", angle: -90, position: "insideLeft" }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--popover))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '0.5rem',
+                      }}
+                    />
+                    <ReferenceLine y={acfData.confidence} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                    <ReferenceLine y={-acfData.confidence} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                    <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" />
+                    <Bar dataKey="correlation" fill="hsl(var(--primary))" />
+                  </BarChart>
+                </ResponsiveContainer>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Red dashed lines represent 95% confidence intervals. Bars extending beyond these lines indicate significant autocorrelation.
+                </p>
+              </CardContent>
+            </Card>
+            )}
 
-            <TabsContent value="pacf" className="space-y-4">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Select Variable to Analyze</Label>
-                  <Select value={pacfVariable} onValueChange={setPacfVariable}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dependent">Dependent Variable ({valueColumn})</SelectItem>
-                      {regressors?.map(reg => (
-                        <SelectItem key={reg} value={reg}>Regressor: {reg}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Time Series Visualization */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Time Series: {pacfVariable === "dependent" ? valueColumn : pacfVariable}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <LineChart data={getTimeSeriesData(pacfVariable)}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis 
-                          dataKey="date" 
-                          tick={{ fontSize: 12 }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={60}
-                        />
-                        <YAxis tick={{ fontSize: 12 }} />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--popover))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '0.5rem',
-                          }}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="value" 
-                          stroke="hsl(var(--chart-3))" 
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-
-                <Button onClick={calculatePACF} variant="outline">
-                  Calculate Partial Autocorrelation Function
-                </Button>
-              </div>
-
-              {pacfData && (
-                <div>
-                  <div className="flex items-center gap-2 mb-4">
+            {pacfData && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
                     <h4 className="text-sm font-semibold">Partial Autocorrelation Function (PACF)</h4>
                     <Badge variant="outline">{pacfData.variable}</Badge>
                   </div>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={pacfData.data}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis dataKey="lag" label={{ value: "Lag", position: "insideBottom", offset: -5 }} />
-                      <YAxis label={{ value: "Correlation", angle: -90, position: "insideLeft" }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(var(--popover))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '0.5rem',
-                        }}
-                      />
-                      <ReferenceLine y={pacfData.confidence} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
-                      <ReferenceLine y={-pacfData.confidence} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
-                      <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" />
-                      <Bar dataKey="correlation" fill="hsl(var(--chart-2))" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Blue dashed lines represent 95% confidence intervals. Significant spikes suggest AR order.
-                  </p>
-                </div>
-              )}
-            </TabsContent>
+                </CardHeader>
+                <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={pacfData.data}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="lag" label={{ value: "Lag", position: "insideBottom", offset: -5 }} />
+                    <YAxis label={{ value: "Correlation", angle: -90, position: "insideLeft" }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--popover))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '0.5rem',
+                      }}
+                    />
+                    <ReferenceLine y={pacfData.confidence} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                    <ReferenceLine y={-pacfData.confidence} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                    <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" />
+                    <Bar dataKey="correlation" fill="hsl(var(--chart-2))" />
+                  </BarChart>
+                </ResponsiveContainer>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Red dashed lines represent 95% confidence intervals. Significant spikes suggest AR order.
+                </p>
+              </CardContent>
+            </Card>
+            )}
+          </div>
 
-            <TabsContent value="transform" className="space-y-4">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Apply To</Label>
+          <Separator />
+
+          {/* Section 4: Data Transformations */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold">4. Data Transformations</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Apply transformations to achieve stationarity - see the visual impact immediately.
+            </p>
+
+            <div className="space-y-2">
+              <Label>Apply To</Label>
                   <Select value={selectedVariable} onValueChange={setSelectedVariable}>
                     <SelectTrigger>
                       <SelectValue />
@@ -682,21 +619,20 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                   </Alert>
                 )}
 
-                <Alert>
-                  <TrendingUp className="h-4 w-4" />
-                  <AlertDescription>
-                    <p className="font-semibold mb-2">Transformation Tips:</p>
-                    <ul className="text-sm space-y-1 list-disc list-inside">
-                      <li>You can apply multiple transformations sequentially</li>
-                      <li>For trending + heteroskedastic data: apply log first, then difference</li>
-                      <li>Stationarity is automatically tested after each transformation</li>
-                      <li>Click the info button next to each transform for detailed guidance</li>
-                    </ul>
-                  </AlertDescription>
-                </Alert>
-              </div>
-            </TabsContent>
-          </Tabs>
+            <Alert>
+              <TrendingUp className="h-4 w-4" />
+              <AlertDescription>
+                <p className="font-semibold mb-2">Transformation Tips:</p>
+                <ul className="text-sm space-y-1 list-disc list-inside">
+                  <li>You can apply multiple transformations sequentially</li>
+                  <li>For trending + heteroskedastic data: apply log first, then difference</li>
+                  <li>Stationarity is automatically tested after each transformation</li>
+                  <li>Click the info button next to each transform for detailed guidance</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+          </div>
+          
         </CardContent>
       </Card>
     </div>
