@@ -5,35 +5,34 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, X, Layers } from "lucide-react";
+import { Plus, X, Target } from "lucide-react";
 import type { SegmentConfig } from "@/types/forecast";
 
 interface SegmentMapperProps {
-  availableColumns: string[];
+  availableSegmentValues: string[];
   segments: SegmentConfig[];
   onSegmentsChange: (segments: SegmentConfig[]) => void;
 }
 
-export const SegmentMapper = ({ availableColumns, segments, onSegmentsChange }: SegmentMapperProps) => {
-  const [newSegmentName, setNewSegmentName] = useState("");
-  const [newSegmentColumn, setNewSegmentColumn] = useState("");
+export const SegmentMapper = ({ availableSegmentValues, segments, onSegmentsChange }: SegmentMapperProps) => {
+  const [selectedSegmentValue, setSelectedSegmentValue] = useState("");
 
   const addSegment = () => {
-    if (newSegmentName && newSegmentColumn && !segments.find((s) => s.segment === newSegmentName)) {
+    if (selectedSegmentValue && !segments.find((s) => s.segmentValue === selectedSegmentValue)) {
       onSegmentsChange([
         ...segments,
         {
-          segment: newSegmentName,
+          segment: selectedSegmentValue,
+          segmentValue: selectedSegmentValue,
           regressors: [],
           forecast_periods: 12,
           frequency: 'MS',
           exclude_recent: 0,
           start_row: 1,
-          end_row: 100,
+          end_row: 1000,
         },
       ]);
-      setNewSegmentName("");
-      setNewSegmentColumn("");
+      setSelectedSegmentValue("");
     }
   };
 
@@ -51,44 +50,33 @@ export const SegmentMapper = ({ availableColumns, segments, onSegmentsChange }: 
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Layers className="h-5 w-5 text-primary" />
-          Segment Configuration
+          <Target className="h-5 w-5 text-primary" />
+          Segment Selection & Configuration
         </CardTitle>
         <CardDescription>
-          Map segments to columns in your CSV. Each segment will have its own model.
+          Select which segments to include and configure their forecast settings
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="segment-name">Segment Name</Label>
-            <Input
-              id="segment-name"
-              placeholder="e.g., Retail Sales"
-              value={newSegmentName}
-              onChange={(e) => setNewSegmentName(e.target.value.trim())}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="segment-column">Map to Column</Label>
-            <div className="flex gap-2">
-              <Select value={newSegmentColumn} onValueChange={setNewSegmentColumn}>
-                <SelectTrigger id="segment-column">
-                  <SelectValue placeholder="Select column" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover">
-                  {availableColumns.map((col) => (
-                    <SelectItem key={col} value={col}>
-                      {col}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button onClick={addSegment} disabled={!newSegmentName || !newSegmentColumn}>
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+        <div className="flex gap-2">
+          <Select value={selectedSegmentValue} onValueChange={setSelectedSegmentValue}>
+            <SelectTrigger className="flex-1">
+              <SelectValue placeholder="Select segment to add" />
+            </SelectTrigger>
+            <SelectContent className="bg-popover max-h-60">
+              {availableSegmentValues
+                .filter((val) => !segments.find((s) => s.segmentValue === val))
+                .map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={addSegment} disabled={!selectedSegmentValue}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Segment
+          </Button>
         </div>
 
         {segments.length === 0 ? (

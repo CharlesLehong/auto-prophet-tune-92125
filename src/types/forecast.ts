@@ -28,6 +28,7 @@ export interface Regressor {
 
 export interface SegmentConfig {
   segment: string;
+  segmentValue: string; // The value in the segment column that identifies this segment
   regressors: Regressor[];
   forecast_periods: number;
   frequency: string;
@@ -39,6 +40,7 @@ export interface SegmentConfig {
 export interface ForecastConfig {
   model: ForecastModel;
   date_column: string;
+  segment_column: string;
   dependent_variable: string;
   segments: SegmentConfig[];
   prophet_params?: ProphetParameters;

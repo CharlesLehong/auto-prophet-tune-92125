@@ -17,6 +17,8 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState("upload");
   const [selectedModel, setSelectedModel] = useState<ForecastModel>("prophet");
   const [dateColumn, setDateColumn] = useState("");
+  const [segmentColumn, setSegmentColumn] = useState("");
+  const [dependentVariable, setDependentVariable] = useState("");
   const [csvData, setCsvData] = useState<any[]>([]);
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
   const [segments, setSegments] = useState<SegmentConfig[]>([]);
@@ -38,10 +40,21 @@ const Index = () => {
   const handleDataLoaded = (data: any[], headers: string[]) => {
     setCsvData(data);
     setAvailableColumns(headers);
-    if (headers.length > 0 && !dateColumn) {
+    if (headers.length > 0) {
       // Auto-detect date column
-      const dateCol = headers.find(h => h.toLowerCase().includes('date') || h.toLowerCase() === 'ds');
-      if (dateCol) setDateColumn(dateCol);
+      if (!dateColumn) {
+        const dateCol = headers.find(h => h.toLowerCase().includes('date') || h.toLowerCase() === 'ds');
+        if (dateCol) setDateColumn(dateCol);
+      }
+      // Auto-detect segment column
+      if (!segmentColumn) {
+        const segCol = headers.find(h => 
+          h.toLowerCase().includes('segment') || 
+          h.toLowerCase().includes('category') ||
+          h.toLowerCase().includes('group')
+        );
+        if (segCol) setSegmentColumn(segCol);
+      }
     }
     toast.success("Data loaded successfully");
   };
@@ -51,10 +64,17 @@ const Index = () => {
     setAvailableColumns([]);
     setSegments([]);
     setDateColumn("");
+    setSegmentColumn("");
+    setDependentVariable("");
   };
 
+  // Get unique segment values from the segment column
+  const uniqueSegmentValues = segmentColumn && csvData.length > 0
+    ? Array.from(new Set(csvData.map(row => row[segmentColumn]).filter(Boolean)))
+    : [];
+
   const availableRegressors = availableColumns.filter(
-    (col) => col !== dateColumn && !segments.find(s => s.segment === col)
+    (col) => col !== dateColumn && col !== segmentColumn && col !== dependentVariable
   );
 
   const handleRunForecast = async () => {
@@ -63,8 +83,8 @@ const Index = () => {
       return;
     }
 
-    if (!dateColumn) {
-      toast.error("Please select a date column");
+    if (!dateColumn || !segmentColumn || !dependentVariable) {
+      toast.error("Please configure all required columns");
       return;
     }
 
@@ -77,22 +97,33 @@ const Index = () => {
     setSegmentProgress(progress);
     setActiveTab("progress");
 
-    // Simulate running models for each segment
+    // Process each segment
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
+      
+      // Filter data for this segment
+      const segmentData = csvData.filter(row => row[segmentColumn] === segment.segmentValue);
       
       // Update status to running
       setSegmentProgress(prev => 
         prev.map((p, idx) => 
-          idx === i ? { ...p, status: 'running', progress: 0, message: 'Preparing data...' } : p
+          idx === i ? { 
+            ...p, 
+            status: 'running', 
+            progress: 0, 
+            message: `Filtering data: ${segmentData.length} rows found` 
+          } : p
         )
       );
 
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       // Simulate model training stages
       const stages = [
-        { progress: 25, message: 'Training model...' },
-        { progress: 50, message: 'Cross-validation...' },
-        { progress: 75, message: 'Generating forecasts...' },
+        { progress: 25, message: `Preparing ${segmentData.length} data points...` },
+        { progress: 50, message: 'Training model with regressors...' },
+        { progress: 75, message: 'Cross-validation...' },
+        { progress: 90, message: 'Generating forecasts...' },
         { progress: 100, message: 'Complete' },
       ];
 
@@ -114,6 +145,8 @@ const Index = () => {
 
       console.log(`Completed forecast for segment: ${segment.segment}`, {
         model: selectedModel,
+        segmentValue: segment.segmentValue,
+        dataPoints: segmentData.length,
         config: segment,
         parameters: selectedModel === 'prophet' ? prophetParams : null,
       });
@@ -175,13 +208,18 @@ const Index = () => {
           <TabsContent value="variables" className="space-y-6">
             <VariableConfig
               dateColumn={dateColumn}
-              dependentVariable=""
+              segmentColumn={segmentColumn}
+              dependentVariable={dependentVariable}
               availableColumns={availableColumns}
               onDateColumnChange={setDateColumn}
-              onDependentVariableChange={() => {}}
+              onSegmentColumnChange={setSegmentColumn}
+              onDependentVariableChange={setDependentVariable}
             />
             <div className="flex justify-end">
-              <Button onClick={() => setActiveTab("segments")} disabled={!dateColumn}>
+              <Button 
+                onClick={() => setActiveTab("segments")} 
+                disabled={!dateColumn || !segmentColumn || !dependentVariable}
+              >
                 Next: Configure Segments
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
@@ -190,7 +228,7 @@ const Index = () => {
 
           <TabsContent value="segments" className="space-y-6">
             <SegmentMapper
-              availableColumns={availableColumns.filter(c => c !== dateColumn)}
+              availableSegmentValues={uniqueSegmentValues as string[]}
               segments={segments}
               onSegmentsChange={setSegments}
             />
@@ -246,11 +284,16 @@ const Index = () => {
 
           <TabsContent value="visualize" className="space-y-6">
             <DataVisualization
-              data={csvData.slice(0, 100).map((row, idx) => ({
-                date: row[dateColumn] || `Row ${idx + 1}`,
-                ...row,
-              }))}
-              dependentVariable={segments[0]?.segment || ''}
+              data={csvData
+                .filter(row => segments.length === 0 || segments.some(s => row[segmentColumn] === s.segmentValue))
+                .slice(0, 100)
+                .map((row) => ({
+                  date: row[dateColumn],
+                  segment: row[segmentColumn],
+                  [dependentVariable]: row[dependentVariable],
+                  ...row,
+                }))}
+              dependentVariable={dependentVariable || 'value'}
               regressors={availableRegressors.slice(0, 5)}
             />
           </TabsContent>
