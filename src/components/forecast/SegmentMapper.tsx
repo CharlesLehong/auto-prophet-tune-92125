@@ -56,6 +56,24 @@ export const SegmentMapper = ({
           total_records: analysis.totalRecords,
           training_records: defaultTraining,
           test_records: analysis.totalRecords - defaultTraining,
+          // Initialize with default Prophet parameters
+          prophet_params: {
+            growth: 'linear',
+            changepoint_prior_scale: 0.05,
+            seasonality_mode: 'additive',
+            seasonality_prior_scale: 10,
+            yearly_seasonality: true,
+            weekly_seasonality: false,
+            daily_seasonality: false,
+            changepoint_range: 0.8,
+            cv_initial: 730,
+            cv_period: 180,
+            cv_horizon: 365,
+            custom_seasonalities: [],
+            interval_width: 0.80,
+            lower_bound: undefined,
+            upper_bound: undefined,
+          },
         },
       ]);
       setSelectedSegmentValue("");

@@ -154,24 +154,6 @@ const Index = () => {
   const [forecastResults, setForecastResults] = useState<ForecastResultsType | null>(null);
   const [selectedMetrics, setSelectedMetrics] = useState<PerformanceMetric[]>(['mae', 'rmse', 'mape', 'coverage']);
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
-  
-  const [prophetParams] = useState<ProphetParameters>({
-    growth: 'linear',
-    changepoint_prior_scale: 0.05,
-    seasonality_mode: 'additive',
-    seasonality_prior_scale: 10,
-    yearly_seasonality: true,
-    weekly_seasonality: false,
-    daily_seasonality: false,
-    changepoint_range: 0.8,
-    cv_initial: 730,
-    cv_period: 180,
-    cv_horizon: 365,
-    custom_seasonalities: [],
-    interval_width: 0.80,
-    lower_bound: undefined,
-    upper_bound: undefined,
-  });
 
   const handleDataLoaded = (data: any[], headers: string[]) => {
     setCsvData(data);
@@ -289,14 +271,32 @@ const Index = () => {
       );
 
       // Generate mock forecast results
-      const segmentProphetParams = segment.prophet_params || prophetParams;
+      // Use segment's prophet_params or fallback to reasonable defaults
+      const prophetParams = segment.prophet_params || {
+        growth: 'linear' as const,
+        changepoint_prior_scale: 0.05,
+        seasonality_mode: 'additive' as const,
+        seasonality_prior_scale: 10,
+        yearly_seasonality: true,
+        weekly_seasonality: false,
+        daily_seasonality: false,
+        changepoint_range: 0.8,
+        cv_initial: 730,
+        cv_period: 180,
+        cv_horizon: 365,
+        custom_seasonalities: [],
+        interval_width: 0.80,
+        lower_bound: undefined,
+        upper_bound: undefined,
+      };
+      
       const mockResults = generateMockForecast(
         trainingData,
         testData,
         segment,
         dateColumn,
         dependentVariable,
-        segmentProphetParams,
+        prophetParams,
         selectedMetrics
       );
       allResults.push(mockResults);
@@ -310,7 +310,7 @@ const Index = () => {
         forecastPeriods: segment.forecast_periods,
         frequency: segment.frequency,
         config: segment,
-        parameters: selectedModel === 'prophet' ? segmentProphetParams : null,
+        parameters: selectedModel === 'prophet' ? (segment.prophet_params || null) : null,
       });
     }
 
