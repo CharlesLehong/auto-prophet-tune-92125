@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import type { ForecastConfig } from "@/types/forecast";
+import type { ForecastResults } from "@/types/forecastResults";
 
 interface SaveModelDialogProps {
   open: boolean;
@@ -21,6 +22,8 @@ interface SaveModelDialogProps {
   config: ForecastConfig;
   existingModelId?: string;
   existingModelName?: string;
+  csvData?: any[];
+  forecastResults?: ForecastResults;
 }
 
 export function SaveModelDialog({
@@ -29,6 +32,8 @@ export function SaveModelDialog({
   config,
   existingModelId,
   existingModelName,
+  csvData,
+  forecastResults,
 }: SaveModelDialogProps) {
   const [modelName, setModelName] = useState(existingModelName || "");
   const [saving, setSaving] = useState(false);
@@ -63,6 +68,8 @@ export function SaveModelDialog({
             autogluon_params: config.autogluon_params as any,
             traditional_params: config.traditional_params as any,
             performance_metrics: config.performance_metrics as any,
+            csv_data: csvData as any,
+            forecast_results: forecastResults as any,
           })
           .eq("id", existingModelId);
 
@@ -112,6 +119,8 @@ export function SaveModelDialog({
             autogluon_params: config.autogluon_params as any,
             traditional_params: config.traditional_params as any,
             performance_metrics: config.performance_metrics as any,
+            csv_data: csvData as any,
+            forecast_results: forecastResults as any,
           }])
           .select()
           .single();

@@ -231,6 +231,17 @@ const Index = () => {
     setDependentVariable(model.dependent_variable);
     setSelectedMetrics((model.performance_metrics as any) || ['mae', 'rmse', 'mape', 'coverage']);
     
+    // Restore CSV data and forecast results
+    if (model.csv_data) {
+      setCsvData(model.csv_data as any);
+      const columns = Object.keys((model.csv_data as any[])[0] || {});
+      setAvailableColumns(columns);
+    }
+    
+    if (model.forecast_results) {
+      setForecastResults(model.forecast_results as any);
+    }
+    
     const loadedSegments: SegmentConfig[] = modelSegments.map((ms: any) => ({
       segment: ms.segment,
       segmentValue: ms.segment_value,
@@ -920,6 +931,8 @@ const Index = () => {
           config={getCurrentConfig()}
           existingModelId={currentModelId}
           existingModelName={currentModelName}
+          csvData={csvData}
+          forecastResults={forecastResults}
         />
       </div>
     </div>

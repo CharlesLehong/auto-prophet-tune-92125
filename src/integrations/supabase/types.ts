@@ -101,8 +101,10 @@ export type Database = {
         Row: {
           autogluon_params: Json | null
           created_at: string
+          csv_data: Json | null
           date_column: string
           dependent_variable: string
+          forecast_results: Json | null
           id: string
           model_name: string
           model_type: string
@@ -116,8 +118,10 @@ export type Database = {
         Insert: {
           autogluon_params?: Json | null
           created_at?: string
+          csv_data?: Json | null
           date_column: string
           dependent_variable: string
+          forecast_results?: Json | null
           id?: string
           model_name: string
           model_type: string
@@ -131,8 +135,10 @@ export type Database = {
         Update: {
           autogluon_params?: Json | null
           created_at?: string
+          csv_data?: Json | null
           date_column?: string
           dependent_variable?: string
+          forecast_results?: Json | null
           id?: string
           model_name?: string
           model_type?: string
