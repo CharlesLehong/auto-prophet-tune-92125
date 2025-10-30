@@ -106,6 +106,7 @@ export type Database = {
           dependent_variable: string
           forecast_results: Json | null
           id: string
+          model_file_path: string | null
           model_name: string
           model_type: string
           performance_metrics: Json | null
@@ -123,6 +124,7 @@ export type Database = {
           dependent_variable: string
           forecast_results?: Json | null
           id?: string
+          model_file_path?: string | null
           model_name: string
           model_type: string
           performance_metrics?: Json | null
@@ -140,6 +142,7 @@ export type Database = {
           dependent_variable?: string
           forecast_results?: Json | null
           id?: string
+          model_file_path?: string | null
           model_name?: string
           model_type?: string
           performance_metrics?: Json | null

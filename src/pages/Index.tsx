@@ -18,6 +18,7 @@ import { ForecastResults } from "@/components/forecast/ForecastResults";
 import { PerformanceMetricSelector } from "@/components/forecast/PerformanceMetricSelector";
 import { DataAnalysisTools } from "@/components/forecast/DataAnalysisTools";
 import { SaveModelDialog } from "@/components/forecast/SaveModelDialog";
+import { ModelDownload } from "@/components/forecast/ModelDownload";
 
 import { ChevronRight, Play, Save, LogOut, Library, Wand2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -938,7 +939,17 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="results" className="space-y-6">
-            {forecastResults && <ForecastResults results={forecastResults} selectedMetrics={selectedMetrics} />}
+            {forecastResults && (
+              <>
+                <ForecastResults results={forecastResults} selectedMetrics={selectedMetrics} />
+                <ModelDownload
+                  modelId={currentModelId}
+                  modelName={currentModelName || "Untitled Model"}
+                  config={getCurrentConfig()}
+                  csvData={csvData}
+                />
+              </>
+            )}
           </TabsContent>
         </Tabs>
 

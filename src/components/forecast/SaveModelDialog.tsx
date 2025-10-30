@@ -75,6 +75,8 @@ export function SaveModelDialog({
 
         if (updateError) throw updateError;
 
+        console.log('[SaveModel] Model updated successfully, ID:', existingModelId);
+
         // Delete existing segments
         await supabase
           .from("model_segments")
@@ -126,6 +128,8 @@ export function SaveModelDialog({
           .single();
 
         if (modelError) throw modelError;
+
+        console.log('[SaveModel] Model created successfully, ID:', modelData.id);
 
         // Insert segments
         const segmentsData = config.segments.map((segment) => ({
