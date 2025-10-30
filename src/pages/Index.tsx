@@ -293,6 +293,12 @@ const Index = () => {
               applied: true
             }));
 
+            // Create time series data for visualization
+            const originalData = segmentData.slice(0, 100).map(row => ({
+              date: row[dateColumn],
+              value: parseFloat(row[columnName]) || 0,
+            })).filter(d => !isNaN(d.value));
+
             try {
               const { data: testResults, error: testError } = await supabase.functions.invoke('statistical-tests', {
                 body: {
@@ -305,6 +311,14 @@ const Index = () => {
 
               if (testError) throw testError;
 
+              // Create transformed data for visualization
+              const transformed = testResults.transformedDataSample 
+                ? originalData.slice(0, testResults.transformedDataSample.length).map((d: any, i: number) => ({
+                    ...d,
+                    value: testResults.transformedDataSample[i]
+                  }))
+                : originalData;
+
               return {
                 varKey,
                 state: {
@@ -314,6 +328,8 @@ const Index = () => {
                   stationarityTest: testResults.after?.adf || testResults.before.adf,
                   acfData: testResults.after?.acf || testResults.before.acf,
                   pacfData: testResults.after?.pacf || testResults.before.pacf,
+                  beforeData: originalData,
+                  afterData: transformed,
                   beforeStats: testResults.before,
                   afterStats: testResults.after,
                   featureImportance: testResults.featureImportance
@@ -326,7 +342,9 @@ const Index = () => {
                 state: {
                   status: 'analyzing',
                   transformations: transformations,
-                  aiRecommendations: analysis
+                  aiRecommendations: analysis,
+                  beforeData: originalData,
+                  afterData: originalData
                 }
               };
             }
