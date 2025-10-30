@@ -341,15 +341,15 @@ const Index = () => {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-9 bg-card text-xs">
-            <TabsTrigger value="upload">Upload</TabsTrigger>
-            <TabsTrigger value="model" disabled={csvData.length === 0}>Model</TabsTrigger>
-            <TabsTrigger value="variables" disabled={csvData.length === 0}>Variables</TabsTrigger>
-            <TabsTrigger value="analysis" disabled={csvData.length === 0}>Analysis</TabsTrigger>
-            <TabsTrigger value="segments" disabled={!dateColumn}>Segments</TabsTrigger>
-            <TabsTrigger value="regressors" disabled={segments.length === 0}>Regressors</TabsTrigger>
-            <TabsTrigger value="metrics" disabled={segments.length === 0}>Metrics</TabsTrigger>
-            <TabsTrigger value="parameters" disabled={segments.length === 0}>Parameters</TabsTrigger>
-            <TabsTrigger value="results" disabled={!forecastResults}>Results</TabsTrigger>
+            <TabsTrigger value="upload">1. Upload</TabsTrigger>
+            <TabsTrigger value="model" disabled={csvData.length === 0}>2. Model</TabsTrigger>
+            <TabsTrigger value="variables" disabled={csvData.length === 0}>3. Variables</TabsTrigger>
+            <TabsTrigger value="segments" disabled={!dateColumn || !segmentColumn || !dependentVariable}>4. Segments</TabsTrigger>
+            <TabsTrigger value="analysis" disabled={segments.length === 0}>5. Analysis</TabsTrigger>
+            <TabsTrigger value="regressors" disabled={segments.length === 0}>6. Regressors</TabsTrigger>
+            <TabsTrigger value="metrics" disabled={segments.length === 0}>7. Metrics</TabsTrigger>
+            <TabsTrigger value="parameters" disabled={segments.length === 0}>8. Parameters</TabsTrigger>
+            <TabsTrigger value="results" disabled={!forecastResults}>9. Results</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upload" className="space-y-6">
@@ -372,7 +372,7 @@ const Index = () => {
             <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
             <div className="flex justify-end">
               <Button onClick={() => setActiveTab("variables")}>
-                Next: Variables
+                Next: Configure Variables
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
@@ -390,9 +390,26 @@ const Index = () => {
             />
             <div className="flex justify-end">
               <Button 
-                onClick={() => setActiveTab("analysis")} 
+                onClick={() => setActiveTab("segments")} 
                 disabled={!dateColumn || !segmentColumn || !dependentVariable}
               >
+                Next: Configure Segments
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="segments" className="space-y-6">
+            <SegmentMapper
+              availableSegmentValues={uniqueSegmentValues as string[]}
+              segments={segments}
+              onSegmentsChange={setSegments}
+              csvData={csvData}
+              segmentColumn={segmentColumn}
+              dateColumn={dateColumn}
+            />
+            <div className="flex justify-end">
+              <Button onClick={() => setActiveTab("analysis")} disabled={segments.length === 0}>
                 Next: Analyze Data
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
@@ -431,23 +448,6 @@ const Index = () => {
                 Please configure segments first in the Segments tab before analyzing data
               </div>
             )}
-            <div className="flex justify-end">
-              <Button onClick={() => setActiveTab("segments")}>
-                Next: Configure Segments
-                <ChevronRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="segments" className="space-y-6">
-            <SegmentMapper
-              availableSegmentValues={uniqueSegmentValues as string[]}
-              segments={segments}
-              onSegmentsChange={setSegments}
-              csvData={csvData}
-              segmentColumn={segmentColumn}
-              dateColumn={dateColumn}
-            />
             <div className="flex justify-end">
               <Button onClick={() => setActiveTab("regressors")} disabled={segments.length === 0}>
                 Next: Configure Regressors
