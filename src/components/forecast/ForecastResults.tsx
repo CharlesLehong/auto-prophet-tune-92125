@@ -161,21 +161,38 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                 </div>
                 <ResponsiveContainer width="100%" height={400}>
                   <AreaChart data={(() => {
-                    // Merge all data with benchmark predictions
+                    // Prepare data with explicit fields for each line type
                     const allData = [...segment.training_data, ...segment.test_data, ...segment.forecast_data];
                     return allData.map((point, idx) => {
                       const testStartIdx = segment.training_data.length;
                       const testEndIdx = testStartIdx + segment.test_data.length;
                       const forecastStartIdx = testEndIdx;
                       
+                      // Determine which fields to populate based on data type
+                      let fitted = null;
+                      let forecast = null;
                       let benchmark_predicted = null;
-                      if (segment.benchmark_test_data && idx >= testStartIdx && idx < testEndIdx) {
-                        benchmark_predicted = segment.benchmark_test_data[idx - testStartIdx]?.predicted;
-                      } else if (segment.benchmark_forecast_data && idx >= forecastStartIdx) {
-                        benchmark_predicted = segment.benchmark_forecast_data[idx - forecastStartIdx]?.predicted;
+                      
+                      if (idx >= testStartIdx && idx < testEndIdx) {
+                        // This is test data - show fitted line
+                        fitted = point.predicted;
+                        if (segment.benchmark_test_data) {
+                          benchmark_predicted = segment.benchmark_test_data[idx - testStartIdx]?.predicted;
+                        }
+                      } else if (idx >= forecastStartIdx) {
+                        // This is forecast data - show forecast line
+                        forecast = point.predicted;
+                        if (segment.benchmark_forecast_data) {
+                          benchmark_predicted = segment.benchmark_forecast_data[idx - forecastStartIdx]?.predicted;
+                        }
                       }
                       
-                      return { ...point, benchmark_predicted };
+                      return { 
+                        ...point, 
+                        fitted,
+                        forecast,
+                        benchmark_predicted 
+                      };
                     });
                   })()}>
                     <defs>
@@ -236,23 +253,23 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                     {/* Test predictions (fitted) */}
                     <Line
                       type="monotone"
-                      dataKey={(point: any) => point.is_test ? point.predicted : null}
+                      dataKey="fitted"
                       stroke="rgb(249, 115, 22)"
                       strokeWidth={2.5}
                       strokeDasharray="5 5"
-                      dot={{ fill: 'rgb(249, 115, 22)', r: 4, strokeWidth: 2, stroke: '#fff' }}
-                      name="Fitted (Test Period)"
+                      dot={{ fill: 'rgb(249, 115, 22)', r: 3 }}
+                      name="Fitted (Test)"
                       connectNulls={true}
                     />
                     
                     {/* Forecast */}
                     <Line
                       type="monotone"
-                      dataKey={(point: any) => point.is_forecast ? point.predicted : null}
+                      dataKey="forecast"
                       stroke="rgb(147, 51, 234)"
-                      strokeWidth={3}
+                      strokeWidth={2.5}
                       strokeDasharray="8 4"
-                      dot={{ fill: 'rgb(147, 51, 234)', r: 5, strokeWidth: 2, stroke: '#fff' }}
+                      dot={{ fill: 'rgb(147, 51, 234)', r: 3 }}
                       name="Forecast"
                       connectNulls={true}
                     />
