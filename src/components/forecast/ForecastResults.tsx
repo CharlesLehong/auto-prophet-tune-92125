@@ -61,7 +61,7 @@ export const ForecastResults = ({ results, selectedMetrics, modelId }: ForecastR
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => navigate("/reports")}
+                onClick={() => navigate(modelId ? `/reports?modelId=${modelId}` : "/reports")}
                 className="gap-2"
               >
                 <FileText className="h-4 w-4" />

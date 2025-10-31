@@ -2,9 +2,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { FileText, Trash2, Download, ArrowLeft, LogOut, Calendar, FileType } from "lucide-react";
+import { FileText, Trash2, Download, Home, LogOut, Calendar, FileType, ChartLine } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 interface SavedReport {
@@ -18,9 +18,11 @@ interface SavedReport {
 
 export default function Reports() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [reports, setReports] = useState<SavedReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteReport, setDeleteReport] = useState<SavedReport | null>(null);
+  const fromModelId = searchParams.get('modelId');
 
   useEffect(() => {
     checkAuth();
@@ -215,15 +217,32 @@ export default function Reports() {
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
             <h1 className="text-2xl font-bold">Saved Reports</h1>
           </div>
-          <Button variant="outline" onClick={handleSignOut}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Sign Out
-          </Button>
+          <div className="flex gap-2">
+            {fromModelId && (
+              <Button 
+                variant="outline" 
+                onClick={() => navigate(`/?modelId=${fromModelId}#results`)}
+                className="gap-2"
+              >
+                <ChartLine className="h-4 w-4" />
+                Back to Results
+              </Button>
+            )}
+            <Button 
+              variant="outline" 
+              onClick={() => navigate("/")}
+              className="gap-2"
+            >
+              <Home className="h-4 w-4" />
+              Forecasting
+            </Button>
+            <Button variant="outline" onClick={handleSignOut}>
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
         </div>
       </header>
 
