@@ -1,16 +1,23 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, ReferenceLine } from "recharts";
-import { TrendingUp, Target, Activity, Wand2 } from "lucide-react";
+import { TrendingUp, Target, Activity, Wand2, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ResultsTable } from "./ResultsTable";
+import { ReportExport } from "./ReportExport";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
-import type { PerformanceMetric } from "@/types/forecast";
+import type { PerformanceMetric, ForecastConfig } from "@/types/forecast";
 
 interface ForecastResultsProps {
   results: ForecastResultsType;
   selectedMetrics: PerformanceMetric[];
+  config?: ForecastConfig;
+  csvData?: any[];
+  modelId?: string;
+  modelName?: string;
 }
 
 const metricLabels: Record<PerformanceMetric, string> = {
@@ -24,7 +31,9 @@ const metricLabels: Record<PerformanceMetric, string> = {
   mase: "MASE",
 };
 
-export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsProps) => {
+export const ForecastResults = ({ results, selectedMetrics, config, csvData, modelId, modelName }: ForecastResultsProps) => {
+  const navigate = useNavigate();
+
   if (!results || results.segments.length === 0) {
     return (
       <Card>
@@ -41,13 +50,36 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-primary" />
-            Forecast Results
-          </CardTitle>
-          <CardDescription>
-            Model: {results.model} | Generated: {new Date(results.timestamp).toLocaleString()}
-          </CardDescription>
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Forecast Results
+              </CardTitle>
+              <CardDescription>
+                Model: {results.model} | Generated: {new Date(results.timestamp).toLocaleString()}
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              {config && (
+                <ReportExport 
+                  results={results}
+                  config={config}
+                  csvData={csvData}
+                  modelId={modelId}
+                  modelName={modelName}
+                />
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(modelId ? `/reports?modelId=${modelId}` : "/reports")}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                View Saved Reports
+              </Button>
+            </div>
+          </div>
         </CardHeader>
       </Card>
 
