@@ -329,14 +329,18 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                         .filter((d) => isValidNumber(d.actual) && isValidNumber(d.predicted))
                         .map((d) => ({
                           date: d.date,
+                          dateTimestamp: new Date(d.date).getTime(),
                           actual: d.actual,
                           predicted: d.predicted,
                         }))}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis 
-                          dataKey="date" 
+                          dataKey="dateTimestamp"
+                          type="number"
+                          domain={['dataMin', 'dataMax']}
+                          scale="time"
                           className="text-xs"
-                          tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                          tickFormatter={(timestamp) => new Date(timestamp).toLocaleDateString()}
                         />
                         <YAxis className="text-xs" />
                         <Tooltip
@@ -345,7 +349,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                             border: '1px solid hsl(var(--border))',
                             borderRadius: '0.5rem',
                           }}
-                          labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                          labelFormatter={(value) => typeof value === 'number' ? new Date(value).toLocaleDateString() : value}
                           formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
                         />
                         <Legend />
@@ -407,14 +411,18 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                         .filter((d) => isValidNumber(d.actual) && isValidNumber(d.predicted))
                         .map((d) => ({
                           date: d.date,
+                          dateTimestamp: new Date(d.date).getTime(),
                           actual: d.actual,
                           predicted: d.predicted,
                         }))}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis 
-                          dataKey="date" 
+                          dataKey="dateTimestamp"
+                          type="number"
+                          domain={['dataMin', 'dataMax']}
+                          scale="time"
                           className="text-xs"
-                          tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                          tickFormatter={(timestamp) => new Date(timestamp).toLocaleDateString()}
                         />
                         <YAxis className="text-xs" />
                         <Tooltip
@@ -423,7 +431,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                             border: '1px solid hsl(var(--border))',
                             borderRadius: '0.5rem',
                           }}
-                          labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                          labelFormatter={(value) => typeof value === 'number' ? new Date(value).toLocaleDateString() : value}
                           formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
                         />
                         <Legend />
@@ -520,7 +528,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                 <ResponsiveContainer width="100%" height={400}>
                   <AreaChart data={(() => {
                     const allData = [...segment.training_data, ...segment.test_data, ...segment.forecast_data];
-                    return allData.map((point, idx) => {
+                    const chartData = allData.map((point, idx) => {
                       const testStartIdx = segment.training_data.length;
                       const testEndIdx = testStartIdx + segment.test_data.length;
                       const forecastStartIdx = testEndIdx;
@@ -534,8 +542,12 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                         forecast = point.predicted;
                       }
                       
+                      // Convert date to timestamp for proper axis scaling
+                      const dateTimestamp = new Date(point.date).getTime();
+                      
                       return {
                         date: point.date,
+                        dateTimestamp,
                         actual: isValidNumber(point.actual) ? point.actual : null,
                         fitted: isValidNumber(fitted) ? fitted : null,
                         forecast: isValidNumber(forecast) ? forecast : null,
@@ -543,6 +555,18 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                         upper_bound: isValidNumber(point.upper_bound) ? point.upper_bound : null,
                       };
                     });
+                    
+                    // Debug logging
+                    console.log('[Chart Data] Transformed series:', {
+                      segment: segment.segment,
+                      totalPoints: chartData.length,
+                      firstDate: chartData[0]?.date,
+                      lastDate: chartData[chartData.length - 1]?.date,
+                      sampleDates: chartData.slice(0, 5).map(d => d.date),
+                      uniqueDates: new Set(chartData.map(d => d.date)).size
+                    });
+                    
+                    return chartData;
                   })()}>
                     <defs>
                       <linearGradient id={`confidenceGradient-transformed-${segment.segment}`} x1="0" y1="0" x2="0" y2="1">
@@ -552,9 +576,12 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis 
-                      dataKey="date" 
+                      dataKey="dateTimestamp"
+                      type="number"
+                      domain={['dataMin', 'dataMax']}
+                      scale="time"
                       className="text-xs"
-                      tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                      tickFormatter={(timestamp) => new Date(timestamp).toLocaleDateString()}
                     />
                     <YAxis className="text-xs" />
                     <Tooltip
@@ -563,7 +590,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '0.5rem',
                       }}
-                      labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                      labelFormatter={(value) => typeof value === 'number' ? new Date(value).toLocaleDateString() : value}
                       formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
                     />
                     <Legend />
@@ -657,7 +684,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                   <ResponsiveContainer width="100%" height={400}>
                     <AreaChart data={(() => {
                       const allData = [...segment.raw_training_data!, ...segment.raw_test_data!, ...segment.raw_forecast_data!];
-                      return allData.map((point, idx) => {
+                      const chartData = allData.map((point, idx) => {
                         const testStartIdx = segment.raw_training_data!.length;
                         const testEndIdx = testStartIdx + segment.raw_test_data!.length;
                         const forecastStartIdx = testEndIdx;
@@ -671,8 +698,12 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                           forecast = point.predicted;
                         }
                         
+                        // Convert date to timestamp for proper axis scaling
+                        const dateTimestamp = new Date(point.date).getTime();
+                        
                         return {
                           date: point.date,
+                          dateTimestamp,
                           actual: isValidNumber(point.actual) ? point.actual : null,
                           fitted: isValidNumber(fitted) ? fitted : null,
                           forecast: isValidNumber(forecast) ? forecast : null,
@@ -680,6 +711,18 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                           upper_bound: isValidNumber(point.upper_bound) ? point.upper_bound : null,
                         };
                       });
+                      
+                      // Debug logging
+                      console.log('[Chart Data] Raw series:', {
+                        segment: segment.segment,
+                        totalPoints: chartData.length,
+                        firstDate: chartData[0]?.date,
+                        lastDate: chartData[chartData.length - 1]?.date,
+                        sampleDates: chartData.slice(0, 5).map(d => d.date),
+                        uniqueDates: new Set(chartData.map(d => d.date)).size
+                      });
+                      
+                      return chartData;
                     })()}>
                       <defs>
                         <linearGradient id={`confidenceGradient-raw-${segment.segment}`} x1="0" y1="0" x2="0" y2="1">
@@ -689,9 +732,12 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis 
-                        dataKey="date" 
+                        dataKey="dateTimestamp"
+                        type="number"
+                        domain={['dataMin', 'dataMax']}
+                        scale="time"
                         className="text-xs"
-                        tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                        tickFormatter={(timestamp) => new Date(timestamp).toLocaleDateString()}
                       />
                       <YAxis className="text-xs" />
                       <Tooltip
@@ -700,7 +746,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                           border: '1px solid hsl(var(--border))',
                           borderRadius: '0.5rem',
                         }}
-                        labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                        labelFormatter={(value) => typeof value === 'number' ? new Date(value).toLocaleDateString() : value}
                         formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
                       />
                       <Legend />
