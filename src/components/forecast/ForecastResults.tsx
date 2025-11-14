@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, ReferenceLine } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from "recharts";
 import { TrendingUp, Target, Activity, Wand2, Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -93,24 +93,37 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
           const v = seg.metrics?.[m];
           if (v !== undefined) {
             const isPct = ['mape','coverage','smape','r2','adj_r2'].includes(m);
-            html += `<div class="metric"><div class="metric-label">${metricLabels[m]}</div>
-<div class="metric-value">${v.toFixed(['r2','adj_r2'].includes(m)?3:isPct?1:2)}${isPct&&!['r2','adj_r2'].includes(m)?'%':''}</div></div>`;
+            html += `<div class="metric">
+              <div class="metric-label">${metricLabels[m]}</div>
+              <div class="metric-value">${v.toFixed(['r2','adj_r2'].includes(m) ? 3 : isPct ? 1 : 2)}${isPct && !['r2','adj_r2'].includes(m) ? '%' : ''}</div>
+            </div>`;
           }
         });
         html += '</div>';
       }
       if (seg.ai_commentary) {
-        html += `<div class="ai"><strong>AI Analysis:</strong><br>${seg.ai_commentary.replace(/\n/g,'<br>')}</div>`;
+        html += `<div class="ai"><strong>AI Commentary:</strong><p>${seg.ai_commentary.replace(/\n/g,'<br>')}</p></div>`;
       }
+
       const charts = document.querySelectorAll(`[data-seg="${seg.segment}"] .recharts-wrapper`);
       for (let i = 0; i < charts.length; i++) {
-        const canvas = await html2canvas(charts[i] as HTMLElement, { backgroundColor: '#fff', scale: 2 });
-        html += `<div class="chart"><img src="${canvas.toDataURL('image/png')}"/></div>`;
+        const canvas = await html2canvas(charts[i] as HTMLElement);
+        html += `<div class="chart"><img src="${canvas.toDataURL()}" alt="Chart ${i+1}"/></div>`;
       }
     }
     html += '</body></html>';
 
-    if (exportFormat === 'html') {
+    if (exportFormat === 'pdf') {
+      const printWindow = window.open('', '', 'width=800,height=600');
+      if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+        setTimeout(() => {
+          printWindow.print();
+          toast.success("Print dialog opened");
+        }, 500);
+      }
+    } else {
       const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -118,32 +131,23 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
       a.download = `${reportName}.html`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("HTML downloaded");
-    } else {
-      const w = window.open('', '_blank');
-      if (w) {
-        w.document.write(html);
-        w.document.close();
-        setTimeout(() => w.print(), 500);
-        toast.success("Print dialog opened");
-      }
+      toast.success("HTML report downloaded");
     }
-  };
-
-  const doExport = async () => {
     setExportDialog(false);
-    if (exportFormat === 'csv') exportCSV();
-    else await exportHTML();
   };
 
-  if (!results || results.segments.length === 0) {
+  const doExport = () => {
+    if (exportFormat === 'csv') exportCSV();
+    else exportHTML();
+  };
+
+  if (!results || !results.segments || results.segments.length === 0) {
     return (
       <Card>
-        <CardContent className="py-12">
-          <div className="text-center text-muted-foreground">
-            No forecast results available. Run a forecast to see results.
-          </div>
-        </CardContent>
+        <CardHeader>
+          <CardTitle>No Results Available</CardTitle>
+          <CardDescription>Run a forecast to see results here</CardDescription>
+        </CardHeader>
       </Card>
     );
   }
@@ -154,23 +158,23 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                Forecast Results
-              </CardTitle>
+              <CardTitle className="text-2xl">Forecast Results</CardTitle>
               <CardDescription>
                 Model: {results.model} | Generated: {new Date(results.timestamp).toLocaleString()}
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => openExport('csv')}>
-                <Download className="h-4 w-4 mr-2" />CSV
+              <Button onClick={() => openExport('csv')} variant="outline" size="sm">
+                <Download className="mr-2 h-4 w-4" />
+                CSV
               </Button>
-              <Button variant="outline" size="sm" onClick={() => openExport('html')}>
-                <Download className="h-4 w-4 mr-2" />HTML
+              <Button onClick={() => openExport('html')} variant="outline" size="sm">
+                <Download className="mr-2 h-4 w-4" />
+                HTML
               </Button>
-              <Button variant="outline" size="sm" onClick={() => openExport('pdf')}>
-                <Download className="h-4 w-4 mr-2" />PDF
+              <Button onClick={() => openExport('pdf')} variant="outline" size="sm">
+                <Download className="mr-2 h-4 w-4" />
+                PDF
               </Button>
             </div>
           </div>
@@ -181,21 +185,30 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Export Report</DialogTitle>
-            <DialogDescription>Name your report</DialogDescription>
+            <DialogDescription>
+              Name your report and select format
+            </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="name">Report Name</Label>
-            <Input id="name" value={reportName} onChange={(e) => setReportName(e.target.value)} />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="reportName">Report Name</Label>
+              <Input
+                id="reportName"
+                value={reportName}
+                onChange={(e) => setReportName(e.target.value)}
+                placeholder="Enter report name"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setExportDialog(false)}>Cancel</Button>
-            <Button onClick={doExport}>Export {exportFormat.toUpperCase()}</Button>
+            <Button onClick={doExport}>Export</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Tabs defaultValue={results.segments[0]?.segment || "0"} className="space-y-4">
-        <TabsList className="w-full overflow-x-auto flex-wrap h-auto">
+      <Tabs defaultValue={results.segments[0].segment} className="w-full">
+        <TabsList className="grid w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 h-auto">
           {results.segments.map((segment, idx) => (
             <TabsTrigger key={idx} value={segment.segment} className="flex-1 min-w-[120px]">
               {segment.segment}
@@ -268,7 +281,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                             </div>
                             {benchmarkValue !== undefined && (
                               <p className="text-xs text-muted-foreground">
-                                benchmark: {benchmarkValue.toFixed(['r2', 'adj_r2'].includes(metric) ? 3 : isPercentage ? 1 : 2)}
+                                vs {segment.benchmark_model} {benchmarkValue.toFixed(['r2', 'adj_r2'].includes(metric) ? 3 : isPercentage ? 1 : 2)}
                                 {isPercentage && !['r2', 'adj_r2'].includes(metric) ? '%' : ''}
                               </p>
                             )}
@@ -291,81 +304,72 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
               </Card>
             )}
 
-            {/* Transformation Impact Comparison */}
-            {segment.raw_test_data && segment.raw_metrics && (
-              <Card className="border-blue-500/30 bg-blue-50/10">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-blue-600" />
-                    Transformation Impact: Test Set Performance
-                  </CardTitle>
-                  <CardDescription>
-                    Visual comparison of model performance with and without transformations
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={350}>
-                    <LineChart data={segment.test_data.map((d, i) => ({
-                      date: d.date,
-                      actual: d.actual,
-                      transformed_predicted: d.predicted,
-                      raw_predicted: segment.raw_test_data?.[i]?.predicted,
-                    }))}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis 
-                        dataKey="date" 
-                        className="text-xs"
-                        tickFormatter={(value) => new Date(value).toLocaleDateString()}
-                      />
-                      <YAxis className="text-xs" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(var(--popover))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '0.5rem',
-                        }}
-                        labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                        formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
-                      />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="actual"
-                        stroke="rgb(37, 99, 235)"
-                        strokeWidth={2.5}
-                        dot={{ fill: 'rgb(37, 99, 235)', r: 4 }}
-                        name="Actual"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="transformed_predicted"
-                        stroke="rgb(34, 197, 94)"
-                        strokeWidth={2.5}
-                        strokeDasharray="5 5"
-                        dot={{ fill: 'rgb(34, 197, 94)', r: 3 }}
-                        name="With Transformations"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="raw_predicted"
-                        stroke="rgb(239, 68, 68)"
-                        strokeWidth={2}
-                        strokeDasharray="3 3"
-                        dot={{ fill: 'rgb(239, 68, 68)', r: 3 }}
-                        name="Without Transformations"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                  <div className="mt-4 grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                      <p className="text-sm font-semibold text-green-800 mb-2">With Transformations</p>
-                      <div className="space-y-1">
-                        {selectedMetrics.slice(0, 3).map((metric) => {
+            {/* Transformation Impact Comparison - Separate Charts */}
+            {segment.raw_test_data && segment.raw_metrics && segment.test_data.length > 0 && (
+              <div className="space-y-6">
+                {/* Transformed Data Chart */}
+                <Card className="border-green-500/30 bg-green-50/10">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-green-600" />
+                      Test Set Performance: With Transformations
+                    </CardTitle>
+                    <CardDescription>
+                      Model predictions on test data with transformations applied
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={segment.test_data.map((d) => ({
+                        date: d.date,
+                        actual: d.actual,
+                        predicted: d.predicted,
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis 
+                          dataKey="date" 
+                          className="text-xs"
+                          tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                        />
+                        <YAxis className="text-xs" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--popover))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '0.5rem',
+                          }}
+                          labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                          formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
+                        />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="actual"
+                          stroke="rgb(37, 99, 235)"
+                          strokeWidth={2.5}
+                          dot={{ fill: 'rgb(37, 99, 235)', r: 4 }}
+                          name="Actual"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="predicted"
+                          stroke="rgb(34, 197, 94)"
+                          strokeWidth={2.5}
+                          strokeDasharray="5 5"
+                          dot={{ fill: 'rgb(34, 197, 94)', r: 3 }}
+                          name="Predicted (Transformed)"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-sm font-semibold text-green-800 mb-2">Performance Metrics</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {selectedMetrics.map(metric => {
                           const value = segment.metrics?.[metric];
                           if (value === undefined) return null;
                           const isPercentage = ['mape', 'coverage', 'smape', 'r2', 'adj_r2'].includes(metric);
                           return (
-                            <div key={metric} className="flex justify-between text-sm">
+                            <div key={metric} className="flex justify-between text-xs">
                               <span className="text-green-700">{metricLabels[metric]}:</span>
                               <span className="font-semibold text-green-900">
                                 {value.toFixed(['r2', 'adj_r2'].includes(metric) ? 3 : isPercentage ? 1 : 2)}
@@ -376,15 +380,72 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                         })}
                       </div>
                     </div>
-                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                      <p className="text-sm font-semibold text-red-800 mb-2">Without Transformations</p>
-                      <div className="space-y-1">
-                        {selectedMetrics.slice(0, 3).map((metric) => {
+                  </CardContent>
+                </Card>
+
+                {/* Raw Data Chart */}
+                <Card className="border-red-500/30 bg-red-50/10">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-red-600" />
+                      Test Set Performance: Without Transformations (Raw)
+                    </CardTitle>
+                    <CardDescription>
+                      Model predictions on test data without transformations
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={segment.raw_test_data.map((d) => ({
+                        date: d.date,
+                        actual: d.actual,
+                        predicted: d.predicted,
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis 
+                          dataKey="date" 
+                          className="text-xs"
+                          tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                        />
+                        <YAxis className="text-xs" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--popover))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '0.5rem',
+                          }}
+                          labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                          formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
+                        />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="actual"
+                          stroke="rgb(37, 99, 235)"
+                          strokeWidth={2.5}
+                          dot={{ fill: 'rgb(37, 99, 235)', r: 4 }}
+                          name="Actual"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="predicted"
+                          stroke="rgb(239, 68, 68)"
+                          strokeWidth={2.5}
+                          strokeDasharray="3 3"
+                          dot={{ fill: 'rgb(239, 68, 68)', r: 3 }}
+                          name="Predicted (Raw)"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-sm font-semibold text-red-800 mb-2">Performance Metrics</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {selectedMetrics.map(metric => {
                           const value = segment.raw_metrics?.[metric];
                           if (value === undefined) return null;
                           const isPercentage = ['mape', 'coverage', 'smape', 'r2', 'adj_r2'].includes(metric);
                           return (
-                            <div key={metric} className="flex justify-between text-sm">
+                            <div key={metric} className="flex justify-between text-xs">
                               <span className="text-red-700">{metricLabels[metric]}:</span>
                               <span className="font-semibold text-red-900">
                                 {value.toFixed(['r2', 'adj_r2'].includes(metric) ? 3 : isPercentage ? 1 : 2)}
@@ -395,17 +456,29 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                         })}
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Alert when no test data available */}
+            {segment.raw_test_data && segment.raw_metrics && segment.test_data.length === 0 && (
+              <Alert className="border-yellow-500/30 bg-yellow-50/10">
+                <AlertDescription>
+                  <p className="font-semibold text-sm mb-2">No Test Data Available</p>
+                  <p className="text-sm">
+                    After applying transformations, there is insufficient data for the test set. This can happen with transformations like "difference" that reduce the dataset size. Performance metrics cannot be calculated without test data.
+                  </p>
+                </AlertDescription>
+              </Alert>
             )}
 
             {/* Complete Time Series - Transformed Data */}
-            <Card>
+            <Card className="border-green-500/30 bg-green-50/10">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Activity className="h-4 w-4" />
-                  Complete Time Series: Transformed Data
+                  <Activity className="h-4 w-4 text-green-600" />
+                  Complete Time Series: With Transformations
                   {segment.transformations_applied && (
                     <Badge variant="secondary" className="ml-2">
                       {segment.transformations_applied.join(', ')}
@@ -430,12 +503,6 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                     <div className="w-3 h-3 rounded-full bg-purple-600 mr-2" />
                     Forecast
                   </Badge>
-                  {(segment.benchmark_test_data || segment.benchmark_forecast_data) && (
-                    <Badge variant="outline" className="bg-indigo-500/10 border-indigo-500/30">
-                      <div className="w-3 h-3 rounded-full bg-indigo-600 mr-2" />
-                      {segment.benchmark_model || 'Benchmark'}
-                    </Badge>
-                  )}
                   <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/30">
                     <div className="w-3 h-3 bg-emerald-600/40 mr-2" />
                     95% Confidence
@@ -443,54 +510,35 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                 </div>
                 <ResponsiveContainer width="100%" height={400}>
                   <AreaChart data={(() => {
-                    // Prepare data with explicit fields for each line type
                     const allData = [...segment.training_data, ...segment.test_data, ...segment.forecast_data];
                     return allData.map((point, idx) => {
                       const testStartIdx = segment.training_data.length;
                       const testEndIdx = testStartIdx + segment.test_data.length;
                       const forecastStartIdx = testEndIdx;
                       
-                      // Determine which fields to populate based on data type
                       let fitted = null;
                       let forecast = null;
-                      let raw_fitted = null;
-                      let raw_forecast = null;
-                      let benchmark_predicted = null;
                       
                       if (idx >= testStartIdx && idx < testEndIdx) {
-                        // This is test data - show fitted line
                         fitted = point.predicted;
-                        if (segment.raw_test_data) {
-                          raw_fitted = segment.raw_test_data[idx - testStartIdx]?.predicted;
-                        }
-                        if (segment.benchmark_test_data) {
-                          benchmark_predicted = segment.benchmark_test_data[idx - testStartIdx]?.predicted;
-                        }
                       } else if (idx >= forecastStartIdx) {
-                        // This is forecast data - show forecast line
                         forecast = point.predicted;
-                        if (segment.raw_forecast_data) {
-                          raw_forecast = segment.raw_forecast_data[idx - forecastStartIdx]?.predicted;
-                        }
-                        if (segment.benchmark_forecast_data) {
-                          benchmark_predicted = segment.benchmark_forecast_data[idx - forecastStartIdx]?.predicted;
-                        }
                       }
                       
-                      return { 
-                        ...point, 
+                      return {
+                        date: point.date,
+                        actual: point.actual,
                         fitted,
                         forecast,
-                        raw_fitted,
-                        raw_forecast,
-                        benchmark_predicted 
+                        lower_bound: point.lower_bound,
+                        upper_bound: point.upper_bound,
                       };
                     });
                   })()}>
                     <defs>
-                      <linearGradient id={`confidenceGradient-${segment.segment}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="rgb(16, 185, 129)" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="rgb(16, 185, 129)" stopOpacity={0.05} />
+                      <linearGradient id={`confidenceGradient-transformed-${segment.segment}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="rgb(16, 185, 129)" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="rgb(16, 185, 129)" stopOpacity={0.05} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -511,14 +559,13 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                     />
                     <Legend />
                     
-                    {/* Confidence interval area */}
                     <Area
                       type="monotone"
                       dataKey="upper_bound"
                       stroke="rgb(16, 185, 129)"
                       strokeWidth={1}
                       strokeOpacity={0.3}
-                      fill={`url(#confidenceGradient-${segment.segment})`}
+                      fill={`url(#confidenceGradient-transformed-${segment.segment})`}
                       name="Upper Bound (95%)"
                     />
                     <Area
@@ -527,11 +574,10 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       stroke="rgb(16, 185, 129)"
                       strokeWidth={1}
                       strokeOpacity={0.3}
-                      fill={`url(#confidenceGradient-${segment.segment})`}
+                      fill={`url(#confidenceGradient-transformed-${segment.segment})`}
                       name="Lower Bound (95%)"
                     />
                     
-                    {/* Actual values (training + test) */}
                     <Line
                       type="monotone"
                       dataKey="actual"
@@ -542,7 +588,6 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       connectNulls={true}
                     />
                     
-                    {/* Test predictions (fitted) */}
                     <Line
                       type="monotone"
                       dataKey="fitted"
@@ -554,7 +599,6 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       connectNulls={true}
                     />
                     
-                    {/* Forecast */}
                     <Line
                       type="monotone"
                       dataKey="forecast"
@@ -562,105 +606,78 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       strokeWidth={2.5}
                       strokeDasharray="8 4"
                       dot={{ fill: 'rgb(147, 51, 234)', r: 3 }}
-                      name="Forecast - Transformed"
+                      name="Forecast"
                       connectNulls={true}
                     />
-                    
-                    {/* Raw data predictions (if available) */}
-                    {segment.raw_test_data && (
-                      <>
-                        <Line
-                          type="monotone"
-                          dataKey="raw_fitted"
-                          stroke="rgb(239, 68, 68)"
-                          strokeWidth={2}
-                          strokeDasharray="3 3"
-                          dot={{ fill: 'rgb(239, 68, 68)', r: 2 }}
-                          name="Fitted (Test) - Raw"
-                          connectNulls={true}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="raw_forecast"
-                          stroke="rgb(236, 72, 153)"
-                          strokeWidth={2}
-                          strokeDasharray="6 3"
-                          dot={{ fill: 'rgb(236, 72, 153)', r: 2 }}
-                          name="Forecast - Raw"
-                          connectNulls={true}
-                        />
-                      </>
-                    )}
-                    
-                    {/* Benchmark Model predictions (if available) */}
-                    {(segment.benchmark_test_data || segment.benchmark_forecast_data) && (
-                      <Line
-                        type="monotone"
-                        dataKey="benchmark_predicted"
-                        stroke="rgb(99, 102, 241)"
-                        strokeWidth={2}
-                        strokeDasharray="3 3"
-                        dot={false}
-                        name={`${segment.benchmark_model || 'Benchmark'}`}
-                        connectNulls={true}
-                      />
-                    )}
-                    
-                    {/* Reference lines */}
-                    {segment.test_data.length > 0 && (
-                      <ReferenceLine 
-                        x={segment.test_data[0]?.date} 
-                        stroke="rgb(156, 163, 175)" 
-                        strokeWidth={2}
-                        strokeDasharray="3 3"
-                        label={{ 
-                          value: 'Test Start', 
-                          position: 'top',
-                          fill: 'rgb(75, 85, 99)',
-                          fontSize: 12,
-                          fontWeight: 600
-                        }}
-                      />
-                    )}
-                    {segment.forecast_data.length > 0 && (
-                      <ReferenceLine 
-                        x={segment.forecast_data[0]?.date} 
-                        stroke="rgb(156, 163, 175)" 
-                        strokeWidth={2}
-                        strokeDasharray="3 3"
-                        label={{ 
-                          value: 'Forecast Start', 
-                          position: 'top',
-                          fill: 'rgb(75, 85, 99)',
-                          fontSize: 12,
-                          fontWeight: 600
-                        }}
-                      />
-                    )}
                   </AreaChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
 
-            {/* Test Performance Detail */}
-            {segment.test_data.length > 0 && (
-              <Card>
+            {/* Complete Time Series - Raw Data */}
+            {segment.raw_training_data && segment.raw_test_data && segment.raw_forecast_data && (
+              <Card className="border-red-500/30 bg-red-50/10">
                 <CardHeader>
-                  <CardTitle className="text-lg">Test Set Performance</CardTitle>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-red-600" />
+                    Complete Time Series: Without Transformations (Raw)
+                  </CardTitle>
                   <CardDescription>
-                    Model predictions vs actual values on holdout test data
-                    {segment.benchmark_model && ` (includes ${segment.benchmark_model} benchmark)`}
+                    Training data, test predictions, and future forecast without transformations
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={segment.benchmark_test_data ? 
-                      segment.test_data.map((d, i) => ({
-                        ...d,
-                        benchmark_predicted: segment.benchmark_test_data?.[i]?.predicted
-                      })) : 
-                      segment.test_data
-                    }>
+                  <div className="flex gap-2 mb-4 flex-wrap">
+                    <Badge variant="outline" className="bg-blue-500/10 border-blue-500/30">
+                      <div className="w-3 h-3 rounded-full bg-blue-600 mr-2" />
+                      Actual Data
+                    </Badge>
+                    <Badge variant="outline" className="bg-orange-500/10 border-orange-500/30">
+                      <div className="w-3 h-3 rounded-full bg-orange-600 mr-2" />
+                      Fitted (Test)
+                    </Badge>
+                    <Badge variant="outline" className="bg-purple-500/10 border-purple-500/30">
+                      <div className="w-3 h-3 rounded-full bg-purple-600 mr-2" />
+                      Forecast
+                    </Badge>
+                    <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/30">
+                      <div className="w-3 h-3 bg-emerald-600/40 mr-2" />
+                      95% Confidence
+                    </Badge>
+                  </div>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <AreaChart data={(() => {
+                      const allData = [...segment.raw_training_data!, ...segment.raw_test_data!, ...segment.raw_forecast_data!];
+                      return allData.map((point, idx) => {
+                        const testStartIdx = segment.raw_training_data!.length;
+                        const testEndIdx = testStartIdx + segment.raw_test_data!.length;
+                        const forecastStartIdx = testEndIdx;
+                        
+                        let fitted = null;
+                        let forecast = null;
+                        
+                        if (idx >= testStartIdx && idx < testEndIdx) {
+                          fitted = point.predicted;
+                        } else if (idx >= forecastStartIdx) {
+                          forecast = point.predicted;
+                        }
+                        
+                        return {
+                          date: point.date,
+                          actual: point.actual,
+                          fitted,
+                          forecast,
+                          lower_bound: point.lower_bound,
+                          upper_bound: point.upper_bound,
+                        };
+                      });
+                    })()}>
+                      <defs>
+                        <linearGradient id={`confidenceGradient-raw-${segment.segment}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="rgb(239, 68, 68)" stopOpacity={0.3} />
+                          <stop offset="100%" stopColor="rgb(239, 68, 68)" stopOpacity={0.05} />
+                        </linearGradient>
+                      </defs>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis 
                         dataKey="date" 
@@ -678,32 +695,58 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                         formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
                       />
                       <Legend />
+                      
+                      <Area
+                        type="monotone"
+                        dataKey="upper_bound"
+                        stroke="rgb(239, 68, 68)"
+                        strokeWidth={1}
+                        strokeOpacity={0.3}
+                        fill={`url(#confidenceGradient-raw-${segment.segment})`}
+                        name="Upper Bound (95%)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="lower_bound"
+                        stroke="rgb(239, 68, 68)"
+                        strokeWidth={1}
+                        strokeOpacity={0.3}
+                        fill={`url(#confidenceGradient-raw-${segment.segment})`}
+                        name="Lower Bound (95%)"
+                      />
+                      
                       <Line
                         type="monotone"
                         dataKey="actual"
                         stroke="rgb(37, 99, 235)"
                         strokeWidth={2.5}
-                        name="Actual"
+                        dot={false}
+                        name="Actual Data"
+                        connectNulls={true}
                       />
+                      
                       <Line
                         type="monotone"
-                        dataKey="predicted"
+                        dataKey="fitted"
                         stroke="rgb(249, 115, 22)"
                         strokeWidth={2.5}
                         strokeDasharray="5 5"
-                        name={`${segment.model || results.model}`}
+                        dot={{ fill: 'rgb(249, 115, 22)', r: 3 }}
+                        name="Fitted (Test)"
+                        connectNulls={true}
                       />
-                      {segment.benchmark_test_data && (
-                        <Line
-                          type="monotone"
-                          dataKey="benchmark_predicted"
-                          stroke="rgb(99, 102, 241)"
-                          strokeWidth={2.5}
-                          strokeDasharray="3 3"
-                          name={`${segment.benchmark_model} (Benchmark)`}
-                        />
-                      )}
-                    </LineChart>
+                      
+                      <Line
+                        type="monotone"
+                        dataKey="forecast"
+                        stroke="rgb(147, 51, 234)"
+                        strokeWidth={2.5}
+                        strokeDasharray="8 4"
+                        dot={{ fill: 'rgb(147, 51, 234)', r: 3 }}
+                        name="Forecast"
+                        connectNulls={true}
+                      />
+                    </AreaChart>
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
