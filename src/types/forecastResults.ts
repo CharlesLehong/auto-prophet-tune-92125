@@ -1,72 +1,72 @@
+import type { PerformanceMetric, DataFrequency } from "./forecast";
+
+// Single forecast data point
 export interface ForecastPoint {
   date: string;
-  actual?: number;
+  actual: number | null;
   predicted: number;
-  lower_bound: number;
-  upper_bound: number;
-  is_test?: boolean;
-  is_forecast?: boolean;
+  lowerBound: number;
+  upperBound: number;
+  isForecast: boolean;
+  isTestSet: boolean;
 }
 
+// Metrics calculation result
+export interface MetricsResult {
+  metric: PerformanceMetric;
+  trainValue: number | null;
+  testValue: number | null;
+}
+
+// Transformation applied to data
+export interface AppliedTransformation {
+  type: "log" | "difference" | "seasonal_difference" | "sqrt" | "box_cox";
+  order?: number;
+  seasonalPeriod?: number;
+  lambda?: number;
+}
+
+// Single segment forecast result
 export interface SegmentForecastResult {
-  segment: string;
-  segmentValue: string;
-  training_data: ForecastPoint[];
-  test_data: ForecastPoint[];
-  forecast_data: ForecastPoint[];
-  metrics?: {
-    mae?: number;
-    rmse?: number;
-    mape?: number;
-    mse?: number;
-    r2?: number;
-    adj_r2?: number;
-    coverage?: number;
-    smape?: number;
-    mase?: number;
-  };
-  ai_commentary?: string;
-  model?: string;
-  transformations_applied?: string[];
-  // Confidence interval parameters
-  interval_width?: number;
-  lower_bound?: number;
-  upper_bound?: number;
-  // Raw data results (without transformations)
-  raw_training_data?: ForecastPoint[];
-  raw_test_data?: ForecastPoint[];
-  raw_forecast_data?: ForecastPoint[];
-  raw_metrics?: {
-    mae?: number;
-    rmse?: number;
-    mape?: number;
-    mse?: number;
-    r2?: number;
-    adj_r2?: number;
-    coverage?: number;
-    smape?: number;
-    mase?: number;
-  };
-  // Benchmark model
-  benchmark_model?: string;
-  benchmark_training_data?: ForecastPoint[];
-  benchmark_test_data?: ForecastPoint[];
-  benchmark_forecast_data?: ForecastPoint[];
-  benchmark_metrics?: {
-    mae?: number;
-    rmse?: number;
-    mape?: number;
-    mse?: number;
-    r2?: number;
-    adj_r2?: number;
-    coverage?: number;
-    smape?: number;
-    mase?: number;
-  };
+  segmentName: string;
+  frequency: DataFrequency;
+  forecastData: ForecastPoint[];
+  metrics: MetricsResult[];
+  transformationsApplied: AppliedTransformation[];
+  aiCommentary?: string;
+  modelConfig: Record<string, unknown>;
+  trainStartDate: string;
+  trainEndDate: string;
+  testStartDate?: string;
+  testEndDate?: string;
+  forecastStartDate: string;
+  forecastEndDate: string;
 }
 
+// Complete forecast results
 export interface ForecastResults {
-  segments: SegmentForecastResult[];
-  model: string;
   timestamp: string;
+  modelType: string;
+  segmentResults: SegmentForecastResult[];
+  overallSummary?: string;
 }
+
+// Export format options
+export type ExportFormat = "csv" | "json" | "html" | "pdf";
+
+// Chart display options
+export interface ChartOptions {
+  showActual: boolean;
+  showPredicted: boolean;
+  showConfidenceInterval: boolean;
+  showTrainTestSplit: boolean;
+  chartHeight: number;
+}
+
+export const defaultChartOptions: ChartOptions = {
+  showActual: true,
+  showPredicted: true,
+  showConfidenceInterval: true,
+  showTrainTestSplit: true,
+  chartHeight: 400,
+};

@@ -1,31 +1,41 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
-import Auth from "./pages/Auth";
-// import Models from "./pages/Models"; // Temporarily disabled until database types sync
-import NotFound from "./pages/NotFound";
+import { Toaster } from "sonner";
+import Index from "@/pages/Index";
+import Auth from "@/pages/Auth";
+import NotFound from "@/pages/NotFound";
 
-const queryClient = new QueryClient();
+// Create a client for React Query
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      retry: 1,
+    },
+  },
+});
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
+const App: React.FC = () => {
+  // For demo purposes, we'll skip auth and go directly to the main app
+  // In production, you would check authentication state here
+  const isAuthenticated = true;
+
+  return (
+    <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
+          <Route
+            path="/"
+            element={isAuthenticated ? <Index /> : <Navigate to="/auth" replace />}
+          />
           <Route path="/auth" element={<Auth />} />
-          {/* <Route path="/models" element={<Models />} /> */} {/* Temporarily disabled */}
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+      <Toaster position="top-right" richColors />
+    </QueryClientProvider>
+  );
+};
 
 export default App;
