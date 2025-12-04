@@ -238,7 +238,9 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
     }));
 
     // Apply transformations
-    const transformedValues = applyTransformations(values);
+    const transformedValues = selectedTransformations.length > 0
+      ? applyTransformations(values)
+      : [...values]; // Clone original if no transformations
 
     // Calculate offset for date alignment (differencing reduces data length)
     let dateOffset = 0;
@@ -248,16 +250,18 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
     });
 
     // Create transformed data with proper date alignment - use ALL transformed points
-    const transformedData = transformedValues.map((v, i) => {
-      const dateIndex = Math.min(i + dateOffset, segmentData.length - 1);
-      const dateStr = dateIndex < segmentData.length
-        ? String(segmentData[dateIndex][dateColumn]).slice(0, 10)
-        : `Point ${i + 1}`;
-      return {
-        date: dateStr,
-        value: Number.isFinite(v) ? v : 0,
-      };
-    });
+    const transformedData = transformedValues.length > 0
+      ? transformedValues.map((v, i) => {
+          const dateIndex = Math.min(i + dateOffset, segmentData.length - 1);
+          const dateValue = segmentData[dateIndex]?.[dateColumn];
+          const dateStr = dateValue ? String(dateValue).slice(0, 10) : `Point ${i + 1}`;
+          const numValue = Number(v);
+          return {
+            date: dateStr,
+            value: Number.isFinite(numValue) ? numValue : 0,
+          };
+        })
+      : originalData; // Fallback to original if no transformed values
 
     // Calculate ACF/PACF before and after
     const acfBefore = calculateACF(values);
@@ -503,26 +507,26 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Original */}
                     <div>
-                      <p className="text-sm font-medium mb-2 text-center">Original Data</p>
+                      <p className="text-sm font-medium mb-2 text-center">Original Data ({analyzeSegment.originalData.length} points)</p>
                       <ResponsiveContainer width="100%" height={200}>
                         <LineChart data={analyzeSegment.originalData}>
-                          <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                           <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-                          <YAxis tick={{ fontSize: 9 }} />
+                          <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
                           <Tooltip />
-                          <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                          <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} dot={false} name="Original" />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
                     {/* Transformed */}
                     <div>
                       <p className="text-sm font-medium mb-2 text-center">
-                        After Transformation
-                        {selectedTransformations.length === 0 && " (none applied)"}
+                        After Transformation ({analyzeSegment.transformedData.length} points)
+                        {selectedTransformations.length === 0 && " - none applied"}
                       </p>
                       <ResponsiveContainer width="100%" height={200}>
                         <LineChart data={analyzeSegment.transformedData}>
-                          <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                           <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
                           <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
                           <Tooltip />
@@ -638,7 +642,7 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
                             <Tooltip />
                             <ReferenceLine y={significanceThreshold} stroke="red" strokeDasharray="3 3" />
                             <ReferenceLine y={-significanceThreshold} stroke="red" strokeDasharray="3 3" />
-                            <Bar dataKey="value" fill="hsl(var(--primary))" />
+                            <Bar dataKey="value" fill="#3b82f6" />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>

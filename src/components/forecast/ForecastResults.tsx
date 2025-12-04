@@ -98,7 +98,8 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
 
   // Prepare transformation comparison data
   const transformationComparisonData = useMemo(() => {
-    if (!originalData || !dateColumn || !dependentVariable || !selectedTransformations) {
+    // Check required props - but allow empty transformations array
+    if (!originalData || !dateColumn || !dependentVariable) {
       return null;
     }
 
@@ -108,35 +109,40 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
 
     if (values.length === 0) return null;
 
-    const transformedValues = selectedTransformations.length > 0
-      ? applyTransformations(values, selectedTransformations)
-      : values;
+    // Use empty array as default if selectedTransformations is undefined
+    const transformations = selectedTransformations || [];
+
+    const transformedValues = transformations.length > 0
+      ? applyTransformations(values, transformations)
+      : [...values]; // Clone if no transformations
 
     // Calculate date offset for alignment
     let dateOffset = 0;
-    selectedTransformations?.forEach((t) => {
+    transformations.forEach((t) => {
       if (t.type === "difference") dateOffset += 1;
       if (t.type === "seasonal_difference") dateOffset += (t.parameters?.seasonalPeriod || 12);
     });
 
     // Original data
-    const beforeData = values.map((val, i) => ({
-      date: i < originalData.length ? String(originalData[i][dateColumn]).slice(0, 10) : `Point ${i + 1}`,
-      value: val,
-    }));
+    const beforeData = values.map((val, i) => {
+      const dateValue = originalData[i]?.[dateColumn];
+      return {
+        date: dateValue ? String(dateValue).slice(0, 10) : `Point ${i + 1}`,
+        value: val,
+      };
+    });
 
     // Transformed data
     const afterData = transformedValues.map((val, i) => {
       const dateIndex = Math.min(i + dateOffset, originalData.length - 1);
+      const dateValue = originalData[dateIndex]?.[dateColumn];
       return {
-        date: dateIndex < originalData.length
-          ? String(originalData[dateIndex][dateColumn]).slice(0, 10)
-          : `Point ${i + 1}`,
+        date: dateValue ? String(dateValue).slice(0, 10) : `Point ${i + 1}`,
         value: Number.isFinite(val) ? val : 0,
       };
     });
 
-    return { beforeData, afterData };
+    return { beforeData, afterData, hasTransformations: transformations.length > 0 };
   }, [originalData, dateColumn, dependentVariable, selectedTransformations]);
 
   const formatNumber = (num: number | null, decimals = 2): string => {
@@ -179,7 +185,7 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
   const testStartIndex = chartData.findIndex((d) => d.isTest);
   const forecastStartIndex = chartData.findIndex((d) => d.isForecast);
 
-  const hasTransformations = selectedTransformations && selectedTransformations.length > 0;
+  const hasTransformations = transformationComparisonData?.hasTransformations ?? false;
 
   return (
     <Card>
