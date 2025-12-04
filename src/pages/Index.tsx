@@ -367,7 +367,13 @@ const Index: React.FC = () => {
                     currentStep="Running forecast model..."
                   />
                 ) : forecastResults ? (
-                  <ForecastResults results={forecastResults} />
+                  <ForecastResults
+                    results={forecastResults}
+                    originalData={csvData}
+                    dateColumn={dateColumn}
+                    dependentVariable={dependentVariable}
+                    selectedTransformations={selectedTransformations}
+                  />
                 ) : (
                   <Card>
                     <CardContent className="p-8 text-center">

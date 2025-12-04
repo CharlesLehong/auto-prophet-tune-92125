@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Line,
+  LineChart,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -11,7 +12,7 @@ import {
   Area,
   ComposedChart,
 } from "recharts";
-import { Download, TrendingUp, AlertCircle } from "lucide-react";
+import { Download, TrendingUp, AlertCircle, BarChart3 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,14 +26,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
+import type { TransformationRecommendation } from "@/types/dataAnalysis";
 import { metricNames } from "@/types/forecast";
 
 interface ForecastResultsProps {
   results: ForecastResultsType;
   onExport?: (format: "csv" | "json") => void;
+  // Props for transformation comparison
+  originalData?: Record<string, unknown>[];
+  dateColumn?: string;
+  dependentVariable?: string;
+  selectedTransformations?: TransformationRecommendation[];
 }
 
-const ForecastResults: React.FC<ForecastResultsProps> = ({ results, onExport }) => {
+const ForecastResults: React.FC<ForecastResultsProps> = ({
+  results,
+  onExport,
+  originalData,
+  dateColumn,
+  dependentVariable,
+  selectedTransformations,
+}) => {
   const [selectedSegment, setSelectedSegment] = useState<string>(
     results.segmentResults[0]?.segmentName || ""
   );
@@ -40,6 +54,90 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({ results, onExport }) 
   const currentSegmentResult = results.segmentResults.find(
     (r) => r.segmentName === selectedSegment
   );
+
+  // Apply transformations to data
+  const applyTransformations = (values: number[], transformations: TransformationRecommendation[]): number[] => {
+    let result = [...values];
+
+    transformations.forEach((transform) => {
+      switch (transform.type) {
+        case "log":
+          result = result.map((v) => (v > 0 ? Math.log(v) : 0));
+          break;
+        case "sqrt":
+          result = result.map((v) => (v >= 0 ? Math.sqrt(v) : 0));
+          break;
+        case "difference":
+          const diffResult: number[] = [];
+          for (let i = 1; i < result.length; i++) {
+            diffResult.push(result[i] - result[i - 1]);
+          }
+          result = diffResult;
+          break;
+        case "seasonal_difference":
+          const period = transform.parameters?.seasonalPeriod || 12;
+          const seasonalResult: number[] = [];
+          for (let i = period; i < result.length; i++) {
+            seasonalResult.push(result[i] - result[i - period]);
+          }
+          result = seasonalResult;
+          break;
+        case "box_cox":
+          const lambda = transform.parameters?.lambda || 0.5;
+          if (lambda === 0) {
+            result = result.map((v) => (v > 0 ? Math.log(v) : 0));
+          } else {
+            result = result.map((v) => (v > 0 ? (Math.pow(v, lambda) - 1) / lambda : 0));
+          }
+          break;
+      }
+    });
+
+    return result;
+  };
+
+  // Prepare transformation comparison data
+  const transformationComparisonData = useMemo(() => {
+    if (!originalData || !dateColumn || !dependentVariable || !selectedTransformations) {
+      return null;
+    }
+
+    const values = originalData
+      .map((row) => Number(row[dependentVariable]))
+      .filter((v) => !isNaN(v));
+
+    if (values.length === 0) return null;
+
+    const transformedValues = selectedTransformations.length > 0
+      ? applyTransformations(values, selectedTransformations)
+      : values;
+
+    // Calculate date offset for alignment
+    let dateOffset = 0;
+    selectedTransformations?.forEach((t) => {
+      if (t.type === "difference") dateOffset += 1;
+      if (t.type === "seasonal_difference") dateOffset += (t.parameters?.seasonalPeriod || 12);
+    });
+
+    // Original data
+    const beforeData = values.map((val, i) => ({
+      date: i < originalData.length ? String(originalData[i][dateColumn]).slice(0, 10) : `Point ${i + 1}`,
+      value: val,
+    }));
+
+    // Transformed data
+    const afterData = transformedValues.map((val, i) => {
+      const dateIndex = Math.min(i + dateOffset, originalData.length - 1);
+      return {
+        date: dateIndex < originalData.length
+          ? String(originalData[dateIndex][dateColumn]).slice(0, 10)
+          : `Point ${i + 1}`,
+        value: Number.isFinite(val) ? val : 0,
+      };
+    });
+
+    return { beforeData, afterData };
+  }, [originalData, dateColumn, dependentVariable, selectedTransformations]);
 
   const formatNumber = (num: number | null, decimals = 2): string => {
     if (num === null || num === undefined) return "N/A";
@@ -81,6 +179,8 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({ results, onExport }) 
   const testStartIndex = chartData.findIndex((d) => d.isTest);
   const forecastStartIndex = chartData.findIndex((d) => d.isForecast);
 
+  const hasTransformations = selectedTransformations && selectedTransformations.length > 0;
+
   return (
     <Card>
       <CardHeader>
@@ -121,7 +221,13 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({ results, onExport }) 
       <CardContent>
         <Tabs defaultValue="chart" className="w-full">
           <TabsList>
-            <TabsTrigger value="chart">Chart</TabsTrigger>
+            <TabsTrigger value="chart">Forecast</TabsTrigger>
+            {transformationComparisonData && (
+              <TabsTrigger value="comparison">
+                <BarChart3 className="h-4 w-4 mr-1" />
+                Before/After
+              </TabsTrigger>
+            )}
             <TabsTrigger value="metrics">Metrics</TabsTrigger>
             <TabsTrigger value="data">Data</TabsTrigger>
           </TabsList>
@@ -223,6 +329,87 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({ results, onExport }) 
               </div>
             </div>
           </TabsContent>
+
+          {/* Transformation Comparison Tab */}
+          {transformationComparisonData && (
+            <TabsContent value="comparison" className="mt-4">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">Data Transformation Comparison</h3>
+                  {hasTransformations && (
+                    <div className="flex gap-2">
+                      {selectedTransformations?.map((t) => (
+                        <Badge key={t.type} variant="secondary">
+                          {t.type === "log" ? "Log" :
+                           t.type === "difference" ? "Diff(1)" :
+                           t.type === "seasonal_difference" ? `Seasonal(${t.parameters?.seasonalPeriod || 12})` :
+                           t.type === "sqrt" ? "Sqrt" :
+                           t.type === "box_cox" ? "Box-Cox" : t.type}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Before Transformation */}
+                  <div className="border rounded-lg p-4">
+                    <h4 className="text-sm font-medium mb-2 text-center">Original Data</h4>
+                    <div className="h-[250px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={transformationComparisonData.beforeData}>
+                          <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                          <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
+                          <YAxis tick={{ fontSize: 9 }} />
+                          <Tooltip />
+                          <Line
+                            type="monotone"
+                            dataKey="value"
+                            stroke="#3b82f6"
+                            strokeWidth={2}
+                            dot={false}
+                            name="Original"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="text-xs text-center text-muted-foreground mt-2">
+                      {transformationComparisonData.beforeData.length} data points
+                    </div>
+                  </div>
+
+                  {/* After Transformation */}
+                  <div className="border rounded-lg p-4">
+                    <h4 className="text-sm font-medium mb-2 text-center">
+                      After Transformation
+                      {!hasTransformations && " (No transformation applied)"}
+                    </h4>
+                    <div className="h-[250px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={transformationComparisonData.afterData}>
+                          <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                          <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
+                          <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
+                          <Tooltip />
+                          <Line
+                            type="monotone"
+                            dataKey="value"
+                            stroke="#22c55e"
+                            strokeWidth={2}
+                            dot={false}
+                            name="Transformed"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="text-xs text-center text-muted-foreground mt-2">
+                      {transformationComparisonData.afterData.length} data points
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+          )}
 
           {/* Metrics Tab */}
           <TabsContent value="metrics" className="mt-4">

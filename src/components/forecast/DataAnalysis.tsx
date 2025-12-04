@@ -231,11 +231,10 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
     if (hasTrend) recommendations.push("difference");
     if (hasSeasonality) recommendations.push("seasonal_difference");
 
-    // Prepare time series data
-    const n = Math.min(50, values.length);
-    const originalData = segmentData.slice(0, n).map((row, i) => ({
-      date: String(row[dateColumn]).slice(0, 10),
-      value: values[i],
+    // Prepare time series data - use ALL data points
+    const originalData = values.map((val, i) => ({
+      date: i < segmentData.length ? String(segmentData[i][dateColumn]).slice(0, 10) : `Point ${i + 1}`,
+      value: val,
     }));
 
     // Apply transformations
@@ -248,16 +247,15 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
       if (t.type === "seasonal_difference") dateOffset += (t.parameters?.seasonalPeriod || 12);
     });
 
-    // Create transformed data with proper date alignment
-    const transformedN = Math.min(50, transformedValues.length);
-    const transformedData = transformedValues.slice(0, transformedN).map((v, i) => {
+    // Create transformed data with proper date alignment - use ALL transformed points
+    const transformedData = transformedValues.map((v, i) => {
       const dateIndex = Math.min(i + dateOffset, segmentData.length - 1);
       const dateStr = dateIndex < segmentData.length
         ? String(segmentData[dateIndex][dateColumn]).slice(0, 10)
         : `Point ${i + 1}`;
       return {
         date: dateStr,
-        value: v,
+        value: Number.isFinite(v) ? v : 0,
       };
     });
 
@@ -526,9 +524,9 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
                         <LineChart data={analyzeSegment.transformedData}>
                           <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                           <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-                          <YAxis tick={{ fontSize: 9 }} />
+                          <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
                           <Tooltip />
-                          <Line type="monotone" dataKey="value" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
+                          <Line type="monotone" dataKey="value" stroke="#22c55e" strokeWidth={2} dot={false} name="Transformed" />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
@@ -654,7 +652,7 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
                             <Tooltip />
                             <ReferenceLine y={significanceThreshold} stroke="red" strokeDasharray="3 3" />
                             <ReferenceLine y={-significanceThreshold} stroke="red" strokeDasharray="3 3" />
-                            <Bar dataKey="value" fill="hsl(var(--chart-3))" />
+                            <Bar dataKey="value" fill="#f97316" />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
@@ -675,7 +673,7 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
                             <Tooltip />
                             <ReferenceLine y={significanceThreshold} stroke="red" strokeDasharray="3 3" />
                             <ReferenceLine y={-significanceThreshold} stroke="red" strokeDasharray="3 3" />
-                            <Bar dataKey="value" fill="hsl(var(--chart-2))" />
+                            <Bar dataKey="value" fill="#22c55e" />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
@@ -689,7 +687,7 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
                             <Tooltip />
                             <ReferenceLine y={significanceThreshold} stroke="red" strokeDasharray="3 3" />
                             <ReferenceLine y={-significanceThreshold} stroke="red" strokeDasharray="3 3" />
-                            <Bar dataKey="value" fill="hsl(var(--chart-4))" />
+                            <Bar dataKey="value" fill="#a855f7" />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
