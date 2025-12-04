@@ -235,6 +235,14 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
     const formatDateStr = (dateVal: unknown): string => {
       if (!dateVal) return '';
       const str = String(dateVal);
+
+      // Handle YYYY-MM format directly (monthly data)
+      if (/^\d{4}-\d{2}$/.test(str)) {
+        const [year, month] = str.split('-');
+        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+        return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+
       try {
         const date = new Date(str);
         if (!isNaN(date.getTime())) {
@@ -269,24 +277,26 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
     });
 
     // Create transformed data with proper date alignment - use ALL transformed points
-    const transformedData = transformedValues.length > 0
-      ? transformedValues.map((v, i) => {
+    // Filter out any NaN or undefined values first
+    const validTransformedValues = transformedValues.filter((v) => Number.isFinite(v));
+
+    const transformedData = validTransformedValues.length > 0
+      ? validTransformedValues.map((v, i) => {
           const dateIndex = Math.min(i + dateOffset, segmentData.length - 1);
           const dateValue = segmentData[dateIndex]?.[dateColumn];
           const dateStr = formatDateStr(dateValue) || `Point ${i + 1}`;
-          const numValue = Number(v);
           return {
             date: dateStr,
-            value: Number.isFinite(numValue) ? numValue : 0,
+            value: v,
           };
         })
-      : originalData; // Fallback to original if no transformed values
+      : originalData.map((d) => ({ ...d })); // Clone original if no valid transformed values
 
     // Calculate ACF/PACF before and after
     const acfBefore = calculateACF(values);
     const pacfBefore = calculatePACF(values);
-    const acfAfter = transformedValues.length >= 10 ? calculateACF(transformedValues) : acfBefore;
-    const pacfAfter = transformedValues.length >= 10 ? calculatePACF(transformedValues) : pacfBefore;
+    const acfAfter = validTransformedValues.length >= 10 ? calculateACF(validTransformedValues) : acfBefore;
+    const pacfAfter = validTransformedValues.length >= 10 ? calculatePACF(validTransformedValues) : pacfBefore;
 
     // Transformed stats
     const transformedMean = transformedValues.length > 0

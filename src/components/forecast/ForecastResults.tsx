@@ -123,14 +123,22 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
       if (t.type === "seasonal_difference") dateOffset += (t.parameters?.seasonalPeriod || 12);
     });
 
-    // Helper to format date for display
+    // Helper to format date for display - use frequency-aware formatting
     const formatDateStr = (dateVal: unknown): string => {
       if (!dateVal) return '';
       const str = String(dateVal);
+
+      // Handle YYYY-MM format directly
+      if (/^\d{4}-\d{2}$/.test(str)) {
+        const [year, month] = str.split('-');
+        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+        return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+
       try {
         const date = new Date(str);
         if (!isNaN(date.getTime())) {
-          // Check if it looks like monthly data (day is 1)
+          // Check if it looks like monthly data (day is 1 or gaps are monthly)
           if (date.getDate() === 1) {
             return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
           }
@@ -170,27 +178,48 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
     return num.toFixed(decimals);
   };
 
-  // Detect if dates are monthly (all on day 1 or similar pattern)
+  // Detect if dates are monthly based on frequency setting or data pattern
   const isMonthlyData = useMemo(() => {
     if (!currentSegmentResult) return false;
-    const dates = currentSegmentResult.forecastData.slice(0, 10).map((p) => new Date(p.date));
-    // Check if all dates are on day 1 or if gaps are roughly monthly
+    // Check frequency setting first - MS (monthly), QS (quarterly), YS (yearly) should show without day
+    const freq = currentSegmentResult.frequency;
+    if (freq === 'MS' || freq === 'QS' || freq === 'YS') return true;
+
+    // Fallback: check data pattern
+    const dates = currentSegmentResult.forecastData.slice(0, 10).map((p) => {
+      try {
+        return new Date(p.date);
+      } catch {
+        return null;
+      }
+    }).filter((d): d is Date => d !== null && !isNaN(d.getTime()));
+
+    if (dates.length === 0) return false;
+
+    // Check if all dates are on day 1
     const allDay1 = dates.every((d) => d.getDate() === 1);
     if (allDay1) return true;
-    // Check if gaps are ~28-31 days
+
+    // Check if gaps are ~28-31 days (monthly)
     if (dates.length >= 2) {
       const gaps = dates.slice(1).map((d, i) => (d.getTime() - dates[i].getTime()) / (1000 * 60 * 60 * 24));
       const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
-      return avgGap >= 25 && avgGap <= 35;
+      return avgGap >= 25;
     }
     return false;
   }, [currentSegmentResult]);
 
   const formatDate = (dateStr: string): string => {
     try {
+      // Handle YYYY-MM format directly
+      if (/^\d{4}-\d{2}$/.test(dateStr)) {
+        const [year, month] = dateStr.split('-');
+        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+        return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) {
-        // If not a valid date, return as-is (might be "2024-01" format)
         return dateStr;
       }
       if (isMonthlyData) {
@@ -273,12 +302,10 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
         <Tabs defaultValue="chart" className="w-full">
           <TabsList>
             <TabsTrigger value="chart">Forecast</TabsTrigger>
-            {transformationComparisonData && (
-              <TabsTrigger value="comparison">
-                <BarChart3 className="h-4 w-4 mr-1" />
-                Before/After
-              </TabsTrigger>
-            )}
+            <TabsTrigger value="comparison">
+              <BarChart3 className="h-4 w-4 mr-1" />
+              Before/After
+            </TabsTrigger>
             <TabsTrigger value="metrics">Metrics</TabsTrigger>
             <TabsTrigger value="data">Data</TabsTrigger>
           </TabsList>
@@ -382,8 +409,8 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
           </TabsContent>
 
           {/* Transformation Comparison Tab */}
-          {transformationComparisonData && (
-            <TabsContent value="comparison" className="mt-4">
+          <TabsContent value="comparison" className="mt-4">
+            {transformationComparisonData ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-medium">Data Transformation Comparison</h3>
@@ -409,9 +436,9 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
                     <div className="h-[250px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={transformationComparisonData.beforeData}>
-                          <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                           <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-                          <YAxis tick={{ fontSize: 9 }} />
+                          <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
                           <Tooltip />
                           <Line
                             type="monotone"
@@ -438,7 +465,7 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
                     <div className="h-[250px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={transformationComparisonData.afterData}>
-                          <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                           <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
                           <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
                           <Tooltip />
@@ -459,8 +486,14 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
                   </div>
                 </div>
               </div>
-            </TabsContent>
-          )}
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No transformation comparison data available.</p>
+                <p className="text-sm mt-2">Make sure data is loaded and variables are configured.</p>
+              </div>
+            )}
+          </TabsContent>
 
           {/* Metrics Tab */}
           <TabsContent value="metrics" className="mt-4">
