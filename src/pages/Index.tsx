@@ -9,6 +9,7 @@ import DataUpload from "@/components/forecast/DataUpload";
 import ModelSelector from "@/components/forecast/ModelSelector";
 import VariableConfig from "@/components/forecast/VariableConfig";
 import SegmentMapper from "@/components/forecast/SegmentMapper";
+import DataAnalysis from "@/components/forecast/DataAnalysis";
 import RegressorConfig from "@/components/forecast/RegressorConfig";
 import ProphetHyperparameters from "@/components/forecast/ProphetHyperparameters";
 import MetricsSelector from "@/components/forecast/MetricsSelector";
@@ -16,6 +17,7 @@ import ForecastResults from "@/components/forecast/ForecastResults";
 import ForecastProgress from "@/components/forecast/ForecastProgress";
 import type { ForecastModel, SegmentConfig, ProphetParameters, PerformanceMetric } from "@/types/forecast";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
+import type { TransformationRecommendation } from "@/types/dataAnalysis";
 import { defaultProphetParams } from "@/types/forecast";
 
 type WorkflowStep =
@@ -61,6 +63,7 @@ const Index: React.FC = () => {
     "r_squared",
   ]);
   const [selectedRegressors, setSelectedRegressors] = useState<string[]>([]);
+  const [selectedTransformations, setSelectedTransformations] = useState<TransformationRecommendation[]>([]);
 
   // UI state
   const [activeTab, setActiveTab] = useState<WorkflowStep>("upload");
@@ -93,6 +96,7 @@ const Index: React.FC = () => {
     setDependentVariable("");
     setSegments([]);
     setSelectedRegressors([]);
+    setSelectedTransformations([]);
     setForecastResults(null);
   }, []);
 
@@ -292,22 +296,17 @@ const Index: React.FC = () => {
                 )}
               </TabsContent>
 
-              {/* Step 5: Data Analysis (Placeholder) */}
+              {/* Step 5: Data Analysis */}
               <TabsContent value="analysis" className="mt-0">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Data Analysis</CardTitle>
-                    <CardDescription>
-                      AI-powered transformation recommendations (coming soon)
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-muted-foreground">
-                      This step will analyze your data and recommend transformations
-                      to improve forecast accuracy.
-                    </p>
-                  </CardContent>
-                </Card>
+                <DataAnalysis
+                  data={csvData}
+                  dependentVariable={dependentVariable}
+                  dateColumn={dateColumn}
+                  segmentColumn={segmentColumn}
+                  segments={segments}
+                  selectedTransformations={selectedTransformations}
+                  onTransformationsChange={setSelectedTransformations}
+                />
                 <div className="flex justify-end mt-4">
                   <Button onClick={goToNextStep}>Continue to Regressors</Button>
                 </div>

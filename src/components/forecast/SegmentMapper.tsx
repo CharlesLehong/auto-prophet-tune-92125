@@ -65,6 +65,23 @@ const SegmentMapper: React.FC<SegmentMapperProps> = ({
     return new Set(segments.map((s) => s.segmentName));
   }, [segments]);
 
+  // Auto-initialize "All Data" when no segment column selected
+  React.useEffect(() => {
+    if (!segmentColumn && segments.length === 0 && data.length > 0) {
+      const totalRecords = data.length;
+      const testRecords = Math.max(1, Math.floor(totalRecords * 0.2));
+      const trainRecords = totalRecords - testRecords;
+      onSegmentsChange([{
+        segmentName: "All Data",
+        trainRecords,
+        testRecords,
+        forecastPeriods: 12,
+        frequency: "MS" as DataFrequency,
+        regressors: [],
+      }]);
+    }
+  }, [segmentColumn, segments.length, data.length, onSegmentsChange]);
+
   // Toggle segment selection
   const toggleSegment = (segmentName: string) => {
     if (selectedSegmentNames.has(segmentName)) {
