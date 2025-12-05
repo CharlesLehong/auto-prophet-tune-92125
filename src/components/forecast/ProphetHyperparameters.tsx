@@ -1,10 +1,11 @@
-import React from "react";
-import { Settings, TrendingUp, Sparkles, Calendar } from "lucide-react";
+import React, { useState } from "react";
+import { Settings, TrendingUp, Sparkles, Calendar, Shield, Plus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -15,6 +16,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ProphetParameters } from "@/types/forecast";
 
+interface CustomSeasonality {
+  name: string;
+  period: number;
+  fourierOrder: number;
+  mode: "additive" | "multiplicative";
+}
+
 interface ProphetHyperparametersProps {
   parameters: ProphetParameters;
   onParametersChange: (params: ProphetParameters) => void;
@@ -24,11 +32,38 @@ const ProphetHyperparameters: React.FC<ProphetHyperparametersProps> = ({
   parameters,
   onParametersChange,
 }) => {
+  const [customSeasonalities, setCustomSeasonalities] = useState<CustomSeasonality[]>([]);
+  const [newSeasonalityName, setNewSeasonalityName] = useState("");
+
   const updateParam = <K extends keyof ProphetParameters>(
     key: K,
     value: ProphetParameters[K]
   ) => {
     onParametersChange({ ...parameters, [key]: value });
+  };
+
+  const addCustomSeasonality = () => {
+    if (!newSeasonalityName.trim()) return;
+    setCustomSeasonalities([
+      ...customSeasonalities,
+      {
+        name: newSeasonalityName.trim(),
+        period: 30,
+        fourierOrder: 5,
+        mode: "additive",
+      },
+    ]);
+    setNewSeasonalityName("");
+  };
+
+  const updateCustomSeasonality = (index: number, updates: Partial<CustomSeasonality>) => {
+    setCustomSeasonalities(
+      customSeasonalities.map((s, i) => (i === index ? { ...s, ...updates } : s))
+    );
+  };
+
+  const removeCustomSeasonality = (index: number) => {
+    setCustomSeasonalities(customSeasonalities.filter((_, i) => i !== index));
   };
 
   return (
@@ -44,7 +79,7 @@ const ProphetHyperparameters: React.FC<ProphetHyperparametersProps> = ({
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="growth" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="growth">
               <TrendingUp className="h-4 w-4 mr-1" />
               Growth
@@ -56,6 +91,10 @@ const ProphetHyperparameters: React.FC<ProphetHyperparametersProps> = ({
             <TabsTrigger value="seasonality">
               <Calendar className="h-4 w-4 mr-1" />
               Seasonality
+            </TabsTrigger>
+            <TabsTrigger value="validation">
+              <Shield className="h-4 w-4 mr-1" />
+              Validation
             </TabsTrigger>
             <TabsTrigger value="uncertainty">
               Uncertainty
@@ -121,13 +160,24 @@ const ProphetHyperparameters: React.FC<ProphetHyperparametersProps> = ({
                 <Slider
                   value={[parameters.changepointPriorScale]}
                   min={0.001}
-                  max={0.5}
+                  max={10}
                   step={0.001}
                   onValueChange={([value]) => updateParam("changepointPriorScale", value)}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Flexibility of trend changes. Higher = more flexible, lower = smoother
-                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    value={parameters.changepointPriorScale}
+                    onChange={(e) => updateParam("changepointPriorScale", parseFloat(e.target.value) || 0.05)}
+                    className="w-24 h-8 text-xs"
+                    min={0.001}
+                    max={10}
+                    step={0.001}
+                  />
+                  <p className="text-xs text-muted-foreground flex-1">
+                    Flexibility of trend changes. Higher = more flexible (0.001-10)
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -168,78 +218,253 @@ const ProphetHyperparameters: React.FC<ProphetHyperparametersProps> = ({
           {/* Seasonality Tab */}
           <TabsContent value="seasonality" className="space-y-6 mt-4">
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Yearly Seasonality</Label>
-                  <p className="text-xs text-muted-foreground">Annual patterns in your data</p>
+              {/* Built-in Seasonalities */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Built-in Seasonalities</Label>
+                <p className="text-xs text-muted-foreground">
+                  These are automatically detected based on your data frequency. Enable "auto" to let Prophet decide.
+                </p>
+
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div>
+                    <Label>Yearly Seasonality</Label>
+                    <p className="text-xs text-muted-foreground">Annual patterns (365.25 days)</p>
+                  </div>
+                  <Switch
+                    checked={parameters.yearlySeasonality === true || parameters.yearlySeasonality === "auto"}
+                    onCheckedChange={(checked) =>
+                      updateParam("yearlySeasonality", checked ? "auto" : false)
+                    }
+                  />
                 </div>
-                <Switch
-                  checked={parameters.yearlySeasonality === true || parameters.yearlySeasonality === "auto"}
-                  onCheckedChange={(checked) =>
-                    updateParam("yearlySeasonality", checked ? "auto" : false)
-                  }
-                />
+
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div>
+                    <Label>Weekly Seasonality</Label>
+                    <p className="text-xs text-muted-foreground">Day-of-week patterns (7 days)</p>
+                  </div>
+                  <Switch
+                    checked={parameters.weeklySeasonality === true || parameters.weeklySeasonality === "auto"}
+                    onCheckedChange={(checked) =>
+                      updateParam("weeklySeasonality", checked ? "auto" : false)
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div>
+                    <Label>Daily Seasonality</Label>
+                    <p className="text-xs text-muted-foreground">Hour-of-day patterns (1 day)</p>
+                  </div>
+                  <Switch
+                    checked={parameters.dailySeasonality === true || parameters.dailySeasonality === "auto"}
+                    onCheckedChange={(checked) =>
+                      updateParam("dailySeasonality", checked ? "auto" : false)
+                    }
+                  />
+                </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Weekly Seasonality</Label>
-                  <p className="text-xs text-muted-foreground">Day-of-week patterns</p>
+              {/* Custom Seasonalities */}
+              <div className="space-y-3 pt-4 border-t">
+                <Label className="text-sm font-medium">Custom Seasonalities</Label>
+                <p className="text-xs text-muted-foreground">
+                  Add custom seasonal patterns (e.g., monthly=30.5, quarterly=91.25)
+                </p>
+
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Seasonality name (e.g., monthly)"
+                    value={newSeasonalityName}
+                    onChange={(e) => setNewSeasonalityName(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button onClick={addCustomSeasonality} disabled={!newSeasonalityName.trim()}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add
+                  </Button>
                 </div>
-                <Switch
-                  checked={parameters.weeklySeasonality === true || parameters.weeklySeasonality === "auto"}
-                  onCheckedChange={(checked) =>
-                    updateParam("weeklySeasonality", checked ? "auto" : false)
-                  }
-                />
+
+                {customSeasonalities.length > 0 && (
+                  <div className="space-y-3">
+                    {customSeasonalities.map((seasonality, index) => (
+                      <div key={index} className="p-3 border rounded-lg space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{seasonality.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeCustomSeasonality(index)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Period (days)</Label>
+                            <Input
+                              type="number"
+                              value={seasonality.period}
+                              onChange={(e) =>
+                                updateCustomSeasonality(index, {
+                                  period: parseFloat(e.target.value) || 30,
+                                })
+                              }
+                              className="h-8 text-xs"
+                              step={0.25}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Fourier Order</Label>
+                            <Input
+                              type="number"
+                              value={seasonality.fourierOrder}
+                              onChange={(e) =>
+                                updateCustomSeasonality(index, {
+                                  fourierOrder: parseInt(e.target.value) || 5,
+                                })
+                              }
+                              className="h-8 text-xs"
+                              min={1}
+                              max={20}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Mode</Label>
+                            <Select
+                              value={seasonality.mode}
+                              onValueChange={(val: "additive" | "multiplicative") =>
+                                updateCustomSeasonality(index, { mode: val })
+                              }
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="additive">Additive</SelectItem>
+                                <SelectItem value="multiplicative">Multiplicative</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Daily Seasonality</Label>
-                  <p className="text-xs text-muted-foreground">Hour-of-day patterns</p>
+              {/* Global Settings */}
+              <div className="space-y-3 pt-4 border-t">
+                <Label className="text-sm font-medium">Global Seasonality Settings</Label>
+
+                <div className="space-y-2">
+                  <Label>Seasonality Mode</Label>
+                  <Select
+                    value={parameters.seasonalityMode}
+                    onValueChange={(value) =>
+                      updateParam("seasonalityMode", value as "additive" | "multiplicative")
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="additive">Additive - Constant seasonal effect</SelectItem>
+                      <SelectItem value="multiplicative">
+                        Multiplicative - Proportional to trend
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Switch
-                  checked={parameters.dailySeasonality === true || parameters.dailySeasonality === "auto"}
-                  onCheckedChange={(checked) =>
-                    updateParam("dailySeasonality", checked ? "auto" : false)
-                  }
-                />
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label>Seasonality Prior Scale</Label>
+                    <span className="text-sm text-muted-foreground">
+                      {parameters.seasonalityPriorScale.toFixed(1)}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[parameters.seasonalityPriorScale]}
+                    min={0.01}
+                    max={20}
+                    step={0.1}
+                    onValueChange={([value]) => updateParam("seasonalityPriorScale", value)}
+                  />
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Validation Tab */}
+          <TabsContent value="validation" className="space-y-6 mt-4">
+            <div className="space-y-4">
+              <div className="p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  Cross-validation helps evaluate model performance on historical data.
+                  Configure the validation strategy below.
+                </p>
               </div>
 
               <div className="space-y-2">
-                <Label>Seasonality Mode</Label>
-                <Select
-                  value={parameters.seasonalityMode}
-                  onValueChange={(value) =>
-                    updateParam("seasonalityMode", value as "additive" | "multiplicative")
+                <Label>Initial Training Period (days)</Label>
+                <Input
+                  type="number"
+                  min={30}
+                  value={(parameters as Record<string, unknown>).initialTrainingPeriod as number || 730}
+                  onChange={(e) =>
+                    updateParam("initialTrainingPeriod" as keyof ProphetParameters, parseInt(e.target.value) || 730)
                   }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="additive">Additive - Constant seasonal effect</SelectItem>
-                    <SelectItem value="multiplicative">
-                      Multiplicative - Proportional to trend
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                  placeholder="730"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Minimum number of days for the first training window (default: 730 = 2 years)
+                </p>
               </div>
 
               <div className="space-y-2">
-                <div className="flex justify-between">
-                  <Label>Seasonality Prior Scale</Label>
-                  <span className="text-sm text-muted-foreground">
-                    {parameters.seasonalityPriorScale.toFixed(1)}
-                  </span>
+                <Label>Period Between Cutoffs (days)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={(parameters as Record<string, unknown>).periodBetweenCutoffs as number || 30}
+                  onChange={(e) =>
+                    updateParam("periodBetweenCutoffs" as keyof ProphetParameters, parseInt(e.target.value) || 30)
+                  }
+                  placeholder="30"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Days between each validation cutoff point (default: 30 = monthly validation)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Forecast Horizon (days)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={(parameters as Record<string, unknown>).forecastHorizon as number || 30}
+                  onChange={(e) =>
+                    updateParam("forecastHorizon" as keyof ProphetParameters, parseInt(e.target.value) || 30)
+                  }
+                  placeholder="30"
+                />
+                <p className="text-xs text-muted-foreground">
+                  How far ahead to forecast at each cutoff (default: 30 days)
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div>
+                  <Label>Enable Cross-Validation</Label>
+                  <p className="text-xs text-muted-foreground">Run validation during forecast</p>
                 </div>
-                <Slider
-                  value={[parameters.seasonalityPriorScale]}
-                  min={0.01}
-                  max={20}
-                  step={0.1}
-                  onValueChange={([value]) => updateParam("seasonalityPriorScale", value)}
+                <Switch
+                  checked={(parameters as Record<string, unknown>).enableCrossValidation as boolean || false}
+                  onCheckedChange={(checked) =>
+                    updateParam("enableCrossValidation" as keyof ProphetParameters, checked)
+                  }
                 />
               </div>
             </div>
@@ -267,7 +492,69 @@ const ProphetHyperparameters: React.FC<ProphetHyperparametersProps> = ({
                 </p>
               </div>
 
-              <div className="space-y-2">
+              {/* Custom Percentile Scale */}
+              <div className="space-y-2 pt-4 border-t">
+                <Label>Custom Percentile Scale</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Specify additional percentile bounds (e.g., 5, 25, 75, 95)
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Lower %</Label>
+                    <Input
+                      type="number"
+                      value={(parameters as Record<string, unknown>).lowerPercentile as number || 5}
+                      onChange={(e) =>
+                        updateParam("lowerPercentile" as keyof ProphetParameters, parseFloat(e.target.value) || 5)
+                      }
+                      className="h-8 text-xs"
+                      min={1}
+                      max={49}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Lower-Mid %</Label>
+                    <Input
+                      type="number"
+                      value={(parameters as Record<string, unknown>).lowerMidPercentile as number || 25}
+                      onChange={(e) =>
+                        updateParam("lowerMidPercentile" as keyof ProphetParameters, parseFloat(e.target.value) || 25)
+                      }
+                      className="h-8 text-xs"
+                      min={1}
+                      max={49}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Upper-Mid %</Label>
+                    <Input
+                      type="number"
+                      value={(parameters as Record<string, unknown>).upperMidPercentile as number || 75}
+                      onChange={(e) =>
+                        updateParam("upperMidPercentile" as keyof ProphetParameters, parseFloat(e.target.value) || 75)
+                      }
+                      className="h-8 text-xs"
+                      min={51}
+                      max={99}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Upper %</Label>
+                    <Input
+                      type="number"
+                      value={(parameters as Record<string, unknown>).upperPercentile as number || 95}
+                      onChange={(e) =>
+                        updateParam("upperPercentile" as keyof ProphetParameters, parseFloat(e.target.value) || 95)
+                      }
+                      className="h-8 text-xs"
+                      min={51}
+                      max={99}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-4 border-t">
                 <Label>Uncertainty Samples</Label>
                 <Input
                   type="number"
