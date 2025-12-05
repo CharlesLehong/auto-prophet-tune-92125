@@ -192,21 +192,34 @@ const adfTest = (values: number[], maxLag?: number): { adfStatistic: number; pVa
     // ADF statistic: t-statistic for γ (coefficient on lagged level)
     const adfStat = beta[1] / seGamma;
 
-    // AIC for lag selection: n*ln(SSR/n) + 2*k
-    const aic = nObs * Math.log(ssr / nObs) + 2 * k;
+    // AIC for lag selection - using statsmodels formula:
+    // ic = log(SSR/n) + (1 + 2*k)/n  where k = number of regressors including constant
+    const aic = Math.log(ssr / nObs) + (1 + 2 * k) / nObs;
 
     return { adf: adfStat, aic, nObs, se: seGamma, coef: beta[1] };
   };
 
-  // Find optimal lag using AIC
-  let bestLag = 0;
-  let bestResult = runADFRegression(0);
+  // Find optimal lag using AIC - iterate from maxlag DOWN to 0 like statsmodels
+  let bestLag = lagLimit;
+  let bestResult = runADFRegression(lagLimit);
+
+  // If maxlag doesn't work, try decreasing lags
+  if (!bestResult) {
+    for (let lag = lagLimit - 1; lag >= 0; lag--) {
+      bestResult = runADFRegression(lag);
+      if (bestResult) {
+        bestLag = lag;
+        break;
+      }
+    }
+  }
 
   if (!bestResult) {
     return { adfStatistic: 0, pValue: 1, lagsUsed: 0, nObs: n };
   }
 
-  for (let lag = 1; lag <= lagLimit; lag++) {
+  // Now find the best AIC, iterating from maxlag-1 down to 0
+  for (let lag = lagLimit - 1; lag >= 0; lag--) {
     const result = runADFRegression(lag);
     if (result && result.aic < bestResult.aic) {
       bestResult = result;
