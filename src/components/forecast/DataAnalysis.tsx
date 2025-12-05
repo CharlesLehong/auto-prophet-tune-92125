@@ -286,17 +286,16 @@ const invertMatrix = (matrix: number[][]): number[][] | null => {
  */
 const approximateADFpValue = (adfStat: number, nObs: number): number => {
   // MacKinnon (2010) coefficients for tau_c (constant, no trend)
-  // p-value = Φ(poly), where poly is a polynomial in the test statistic
-  // These are the tau_c coefficients for different sample sizes
-
+  // cv(p, T) = beta_inf + beta_1/T + beta_2/T^2
+  // Coefficients from MacKinnon (2010) for tau_c
   const T = nObs;
 
-  // Critical values with sample size adjustment using MacKinnon formula:
-  // cv(p, T) = beta_inf + beta_1/T + beta_2/T^2
-  // Coefficients from MacKinnon (2010) Table 1 for tau_c
   const criticalValueCoeffs = [
-    { p: 0.001, beta: [-3.4336, -5.999, -29.25] },
-    { p: 0.005, beta: [-3.4626, -6.353, -26.01] },
+    { p: 0.0001, beta: [-4.38, -11.5, -50.0] },
+    { p: 0.0005, beta: [-4.15, -9.5, -42.0] },
+    { p: 0.001, beta: [-3.96, -8.353, -37.22] },
+    { p: 0.002, beta: [-3.80, -7.5, -32.0] },
+    { p: 0.005, beta: [-3.58, -6.353, -26.01] },
     { p: 0.01, beta: [-3.4336, -5.999, -29.25] },
     { p: 0.025, beta: [-3.1279, -3.580, -17.17] },
     { p: 0.05, beta: [-2.8621, -2.738, -8.36] },
@@ -320,7 +319,7 @@ const approximateADFpValue = (adfStat: number, nObs: number): number => {
   }));
 
   // If stat is more negative than smallest critical value, very significant
-  if (adfStat <= criticalValues[0].cv) return 0.0001;
+  if (adfStat <= criticalValues[0].cv) return criticalValues[0].p;
 
   // If stat is more positive than largest critical value, not significant
   if (adfStat >= criticalValues[criticalValues.length - 1].cv) return 0.9999;
