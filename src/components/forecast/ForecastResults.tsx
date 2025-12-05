@@ -12,7 +12,7 @@ import {
   Area,
   ComposedChart,
 } from "recharts";
-import { Download, TrendingUp, AlertCircle, BarChart3 } from "lucide-react";
+import { Download, TrendingUp, AlertCircle, BarChart3, FileText, Table2, LineChart as LineChartIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -206,6 +206,93 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
     return num.toFixed(decimals);
   };
 
+  // Download helper functions
+  const downloadCSV = (data: string, filename: string) => {
+    const blob = new Blob([data], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadForecast = () => {
+    if (!currentSegmentResult) return;
+
+    const headers = ['Date', 'Actual', 'Predicted', 'Lower Bound', 'Upper Bound', 'Type'];
+    const rows = currentSegmentResult.forecastData.map((point) => [
+      point.date,
+      point.actual ?? '',
+      point.predicted ?? '',
+      point.lowerBound ?? '',
+      point.upperBound ?? '',
+      point.isForecast ? 'Forecast' : point.isTestSet ? 'Test' : 'Train'
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.join(','))
+    ].join('\n');
+
+    downloadCSV(csvContent, `forecast_${selectedSegment}_${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
+  const handleDownloadMetrics = () => {
+    if (!currentSegmentResult) return;
+
+    const headers = ['Metric', 'Full Name', 'Training Value', 'Test Value'];
+    const rows = currentSegmentResult.metrics.map((m) => [
+      m.metric.toUpperCase(),
+      metricNames[m.metric] || m.metric,
+      m.trainValue ?? '',
+      m.testValue ?? ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.join(','))
+    ].join('\n');
+
+    downloadCSV(csvContent, `metrics_${selectedSegment}_${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
+  const handleDownloadOriginalData = () => {
+    if (!originalData || originalData.length === 0) return;
+
+    // Get all column names from the first row
+    const headers = Object.keys(originalData[0]);
+
+    // Filter by segment if applicable
+    let dataToExport = originalData;
+    if (segmentColumn && selectedSegment && selectedSegment !== "All Data") {
+      dataToExport = originalData.filter(
+        (row) => String(row[segmentColumn]) === selectedSegment
+      );
+    }
+
+    const rows = dataToExport.map((row) =>
+      headers.map((h) => {
+        const val = row[h];
+        // Escape commas and quotes
+        if (typeof val === 'string' && (val.includes(',') || val.includes('"'))) {
+          return `"${val.replace(/"/g, '""')}"`;
+        }
+        return val ?? '';
+      })
+    );
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.join(','))
+    ].join('\n');
+
+    downloadCSV(csvContent, `data_${selectedSegment}_${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
   // Detect if dates are monthly based on frequency setting or data pattern
   const isMonthlyData = useMemo(() => {
     if (!currentSegmentResult) return false;
@@ -334,12 +421,22 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
                 </SelectContent>
               </Select>
             )}
-            {onExport && (
-              <Button variant="outline" size="sm" onClick={() => onExport("csv")}>
-                <Download className="h-4 w-4 mr-1" />
-                Export
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" onClick={handleDownloadForecast} title="Download Forecast">
+                <LineChartIcon className="h-4 w-4 mr-1" />
+                Forecast
               </Button>
-            )}
+              <Button variant="outline" size="sm" onClick={handleDownloadMetrics} title="Download Metrics">
+                <Table2 className="h-4 w-4 mr-1" />
+                Metrics
+              </Button>
+              {originalData && originalData.length > 0 && (
+                <Button variant="outline" size="sm" onClick={handleDownloadOriginalData} title="Download Data">
+                  <FileText className="h-4 w-4 mr-1" />
+                  Data
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </CardHeader>

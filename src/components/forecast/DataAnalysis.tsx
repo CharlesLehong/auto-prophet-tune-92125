@@ -809,6 +809,107 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
               )}
             </div>
 
+            {/* ADF Test Interpretation */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg space-y-4">
+              <div className="flex items-start gap-3">
+                <Info className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                <div className="space-y-3">
+                  <h4 className="font-medium">ADF Test Interpretation</h4>
+
+                  <div className="text-sm space-y-2">
+                    <p className="text-muted-foreground">
+                      The <strong>Augmented Dickey-Fuller (ADF) test</strong> checks whether a time series is stationary.
+                      A stationary series has constant statistical properties (mean, variance) over time, which is essential
+                      for accurate forecasting.
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                      <div className="p-3 bg-white dark:bg-slate-800 rounded border">
+                        <p className="font-medium text-sm mb-1">How to Read ADF Results:</p>
+                        <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                          <li><strong>P-value &lt; 0.05</strong>: Series is stationary (good!)</li>
+                          <li><strong>P-value ≥ 0.05</strong>: Series is non-stationary (needs transformation)</li>
+                          <li><strong>ADF Statistic</strong>: More negative = stronger stationarity</li>
+                        </ul>
+                      </div>
+
+                      <div className="p-3 bg-white dark:bg-slate-800 rounded border">
+                        <p className="font-medium text-sm mb-1">Current Status:</p>
+                        <div className="text-xs space-y-1">
+                          {analyzeSegment.isStationary ? (
+                            <p className="text-green-600">Original data is already stationary (p={analyzeSegment.pValue.toFixed(4)})</p>
+                          ) : (
+                            <p className="text-amber-600">Original data is non-stationary (p={analyzeSegment.pValue.toFixed(4)})</p>
+                          )}
+                          {selectedTransformations.length > 0 && (
+                            analyzeSegment.transformedStats.isStationary ? (
+                              <p className="text-green-600">After transformation: Stationary (p={analyzeSegment.transformedStats.pValue.toFixed(4)})</p>
+                            ) : (
+                              <p className="text-amber-600">After transformation: Still non-stationary - consider additional transforms</p>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-sm space-y-2">
+                    <p className="font-medium">Why Apply Transformations?</p>
+                    <div className="grid grid-cols-1 gap-2">
+                      {analyzeSegment.hasVarianceInstability && (
+                        <div className="p-2 bg-purple-50 dark:bg-purple-900/30 rounded text-xs">
+                          <span className="font-medium text-purple-700 dark:text-purple-400">Variance Instability Detected:</span>
+                          <span className="text-muted-foreground ml-1">
+                            Apply <strong>Log</strong> or <strong>Square Root</strong> transform to stabilize variance.
+                            This ensures forecast uncertainty is consistent across all time periods.
+                          </span>
+                        </div>
+                      )}
+                      {analyzeSegment.hasTrend && (
+                        <div className="p-2 bg-amber-50 dark:bg-amber-900/30 rounded text-xs">
+                          <span className="font-medium text-amber-700 dark:text-amber-400">Trend Detected:</span>
+                          <span className="text-muted-foreground ml-1">
+                            Apply <strong>First Difference</strong> (d=1) to remove linear trend. This makes the
+                            mean constant over time.
+                          </span>
+                        </div>
+                      )}
+                      {analyzeSegment.hasSeasonality && (
+                        <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded text-xs">
+                          <span className="font-medium text-blue-700 dark:text-blue-400">Seasonality Detected (Period: {analyzeSegment.seasonalPeriod}):</span>
+                          <span className="text-muted-foreground ml-1">
+                            Apply <strong>Seasonal Difference</strong> at lag {analyzeSegment.seasonalPeriod} to remove
+                            repeating patterns. ACF should show decay after this transformation.
+                          </span>
+                        </div>
+                      )}
+                      {!analyzeSegment.hasVarianceInstability && !analyzeSegment.hasTrend && !analyzeSegment.hasSeasonality && (
+                        <div className="p-2 bg-green-50 dark:bg-green-900/30 rounded text-xs">
+                          <span className="font-medium text-green-700 dark:text-green-400">No Major Issues:</span>
+                          <span className="text-muted-foreground ml-1">
+                            Your data appears to be well-behaved. Transformations are optional but may still improve
+                            model performance.
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="text-sm space-y-2 pt-2 border-t">
+                    <p className="font-medium">Reading ACF/PACF Charts:</p>
+                    <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                      <li><strong>ACF (Autocorrelation)</strong>: Shows correlation between observations at different lags.
+                        Slow decay suggests trend; significant spikes at seasonal lags suggest seasonality.</li>
+                      <li><strong>PACF (Partial Autocorrelation)</strong>: Shows direct correlation at each lag,
+                        controlling for intermediate lags. Helps determine AR order (p).</li>
+                      <li>Bars crossing red lines are <strong>statistically significant</strong>.</li>
+                      <li>After transformation, ideally most bars should stay within the significance bounds.</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* ARIMA Suggestions */}
             <div className="border rounded-lg overflow-hidden">
               <button
