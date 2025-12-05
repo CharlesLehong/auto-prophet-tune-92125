@@ -10,7 +10,7 @@ import ModelSelector from "@/components/forecast/ModelSelector";
 import VariableConfig from "@/components/forecast/VariableConfig";
 import SegmentMapper from "@/components/forecast/SegmentMapper";
 import DataAnalysis from "@/components/forecast/DataAnalysis";
-import RegressorConfig from "@/components/forecast/RegressorConfig";
+import RegressorConfig, { type RegressorSettings } from "@/components/forecast/RegressorConfig";
 import ProphetHyperparameters from "@/components/forecast/ProphetHyperparameters";
 import MetricsSelector from "@/components/forecast/MetricsSelector";
 import ForecastResults from "@/components/forecast/ForecastResults";
@@ -62,7 +62,7 @@ const Index: React.FC = () => {
     "mape",
     "r_squared",
   ]);
-  const [selectedRegressors, setSelectedRegressors] = useState<string[]>([]);
+  const [selectedRegressors, setSelectedRegressors] = useState<RegressorSettings[]>([]);
   const [selectedTransformations, setSelectedTransformations] = useState<TransformationRecommendation[]>([]);
 
   // UI state

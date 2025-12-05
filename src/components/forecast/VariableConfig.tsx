@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect } from "react";
 import { Calendar, Layers, Target, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -61,6 +61,36 @@ const VariableConfig: React.FC<VariableConfigProps> = ({
       (col) => col !== dateColumn && col !== dependentVariable
     );
   }, [columns, dateColumn, dependentVariable]);
+
+  // Auto-select segment column if "segment" is found
+  useEffect(() => {
+    if (!segmentColumn && columns.length > 0) {
+      const segmentCol = columns.find((col) =>
+        col.toLowerCase() === "segment" ||
+        col.toLowerCase().includes("segment")
+      );
+      if (segmentCol) {
+        onSegmentColumnChange(segmentCol);
+      }
+    }
+  }, [columns, segmentColumn, onSegmentColumnChange]);
+
+  // Auto-select dependent variable if "dependent" is found
+  useEffect(() => {
+    if (!dependentVariable && columns.length > 0) {
+      const dependentCol = columns.find((col) =>
+        col.toLowerCase() === "dependent" ||
+        col.toLowerCase().includes("dependent") ||
+        col.toLowerCase() === "target" ||
+        col.toLowerCase().includes("target") ||
+        col.toLowerCase() === "y" ||
+        col.toLowerCase() === "value"
+      );
+      if (dependentCol && numericColumns.includes(dependentCol)) {
+        onDependentVariableChange(dependentCol);
+      }
+    }
+  }, [columns, dependentVariable, numericColumns, onDependentVariableChange]);
 
   // Validation
   const isValid = dateColumn && dependentVariable;
