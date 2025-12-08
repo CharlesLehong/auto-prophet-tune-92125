@@ -20,6 +20,105 @@ import type { ForecastResults as ForecastResultsType } from "@/types/forecastRes
 import type { TransformationRecommendation } from "@/types/dataAnalysis";
 import { defaultProphetParams } from "@/types/forecast";
 
+// Metric calculation helper functions
+const calculateMetrics = (
+  actuals: number[],
+  predictions: number[],
+  lowerBounds: number[],
+  upperBounds: number[],
+  metric: PerformanceMetric
+): number => {
+  const n = actuals.length;
+  if (n === 0 || predictions.length !== n) return 0;
+
+  // Filter out any NaN values
+  const validPairs = actuals.map((a, i) => ({ a, p: predictions[i], lb: lowerBounds[i], ub: upperBounds[i] }))
+    .filter(pair => !isNaN(pair.a) && !isNaN(pair.p) && pair.a !== null && pair.p !== null);
+
+  const validN = validPairs.length;
+  if (validN === 0) return 0;
+
+  const validActuals = validPairs.map(p => p.a);
+  const validPredictions = validPairs.map(p => p.p);
+  const validLower = validPairs.map(p => p.lb);
+  const validUpper = validPairs.map(p => p.ub);
+
+  switch (metric) {
+    case "mae": {
+      // Mean Absolute Error
+      const sum = validActuals.reduce((acc, a, i) => acc + Math.abs(a - validPredictions[i]), 0);
+      return sum / validN;
+    }
+    case "mse": {
+      // Mean Squared Error
+      const sum = validActuals.reduce((acc, a, i) => acc + Math.pow(a - validPredictions[i], 2), 0);
+      return sum / validN;
+    }
+    case "rmse": {
+      // Root Mean Squared Error
+      const sum = validActuals.reduce((acc, a, i) => acc + Math.pow(a - validPredictions[i], 2), 0);
+      return Math.sqrt(sum / validN);
+    }
+    case "mape": {
+      // Mean Absolute Percentage Error (returns as percentage, e.g., 5.2 means 5.2%)
+      const validForMape = validPairs.filter(p => Math.abs(p.a) > 0.0001);
+      if (validForMape.length === 0) return 0;
+      const sum = validForMape.reduce((acc, p) => acc + Math.abs((p.a - p.p) / p.a), 0);
+      return (sum / validForMape.length) * 100;
+    }
+    case "smape": {
+      // Symmetric MAPE (returns as percentage)
+      const validForSmape = validPairs.filter(p => (Math.abs(p.a) + Math.abs(p.p)) > 0.0001);
+      if (validForSmape.length === 0) return 0;
+      const sum = validForSmape.reduce((acc, p) => {
+        const denom = (Math.abs(p.a) + Math.abs(p.p)) / 2;
+        return acc + Math.abs(p.a - p.p) / denom;
+      }, 0);
+      return (sum / validForSmape.length) * 100;
+    }
+    case "r_squared": {
+      // R-Squared (Coefficient of Determination)
+      const meanActual = validActuals.reduce((a, b) => a + b, 0) / validN;
+      const ssTot = validActuals.reduce((acc, a) => acc + Math.pow(a - meanActual, 2), 0);
+      const ssRes = validActuals.reduce((acc, a, i) => acc + Math.pow(a - validPredictions[i], 2), 0);
+      if (ssTot === 0) return 1; // Perfect prediction of constant
+      return 1 - (ssRes / ssTot);
+    }
+    case "adjusted_r_squared": {
+      // Adjusted R-Squared
+      const meanActual = validActuals.reduce((a, b) => a + b, 0) / validN;
+      const ssTot = validActuals.reduce((acc, a) => acc + Math.pow(a - meanActual, 2), 0);
+      const ssRes = validActuals.reduce((acc, a, i) => acc + Math.pow(a - validPredictions[i], 2), 0);
+      if (ssTot === 0) return 1;
+      const rSquared = 1 - (ssRes / ssTot);
+      const k = 1; // Number of predictors (simplified)
+      if (validN <= k + 1) return rSquared;
+      return 1 - ((1 - rSquared) * (validN - 1)) / (validN - k - 1);
+    }
+    case "mase": {
+      // Mean Absolute Scaled Error
+      const mae = validActuals.reduce((acc, a, i) => acc + Math.abs(a - validPredictions[i]), 0) / validN;
+      // Calculate naive forecast error (random walk)
+      let naiveSum = 0;
+      for (let i = 1; i < validN; i++) {
+        naiveSum += Math.abs(validActuals[i] - validActuals[i - 1]);
+      }
+      const naiveMae = naiveSum / (validN - 1);
+      if (naiveMae === 0) return 0;
+      return mae / naiveMae;
+    }
+    case "coverage": {
+      // Coverage: proportion of actuals within prediction interval (returns as decimal 0-1)
+      const withinInterval = validPairs.filter(
+        (p, i) => p.a >= validLower[i] && p.a <= validUpper[i]
+      ).length;
+      return withinInterval / validN;
+    }
+    default:
+      return 0;
+  }
+};
+
 type WorkflowStep =
   | "upload"
   | "model"
@@ -190,13 +289,17 @@ const Index: React.FC = () => {
           // Historical data
           ...actualDates.slice(0, dataLength).map((date, i) => {
             const value = actualValues[i] || 0;
-            const noise = Math.random() * value * 0.05;
+            // Add small noise for demo predictions (in real app, this would be model output)
+            const noise = (Math.random() - 0.5) * value * 0.1;
+            const predicted = value + noise;
+            // Confidence interval based on prediction uncertainty
+            const uncertainty = Math.abs(value) * 0.15;
             return {
               date: date,
               actual: value,
-              predicted: value + noise,
-              lowerBound: value * 0.9,
-              upperBound: value * 1.1,
+              predicted: predicted,
+              lowerBound: predicted - uncertainty,
+              upperBound: predicted + uncertainty,
               isForecast: false,
               isTestSet: i >= trainEndIdx,
             };
@@ -205,17 +308,32 @@ const Index: React.FC = () => {
           ...forecastDates.map((date, i) => {
             const lastValue = actualValues[actualValues.length - 1] || 100;
             const trend = lastValue * (1 + 0.02 * (i + 1));
+            const uncertainty = Math.abs(trend) * 0.15 * (1 + i * 0.1); // Increasing uncertainty
             return {
               date: date,
               actual: null,
               predicted: trend,
-              lowerBound: trend * 0.85,
-              upperBound: trend * 1.15,
+              lowerBound: trend - uncertainty,
+              upperBound: trend + uncertainty,
               isForecast: true,
               isTestSet: false,
             };
           }),
         ];
+
+        // Extract training and test data for metric calculations
+        const trainData = forecastData.filter(d => !d.isForecast && !d.isTestSet);
+        const testData = forecastData.filter(d => !d.isForecast && d.isTestSet);
+
+        const trainActuals = trainData.map(d => d.actual).filter((a): a is number => a !== null);
+        const trainPredictions = trainData.map(d => d.predicted).filter((p): p is number => p !== null);
+        const trainLower = trainData.map(d => d.lowerBound).filter((l): l is number => l !== null);
+        const trainUpper = trainData.map(d => d.upperBound).filter((u): u is number => u !== null);
+
+        const testActuals = testData.map(d => d.actual).filter((a): a is number => a !== null);
+        const testPredictions = testData.map(d => d.predicted).filter((p): p is number => p !== null);
+        const testLower = testData.map(d => d.lowerBound).filter((l): l is number => l !== null);
+        const testUpper = testData.map(d => d.upperBound).filter((u): u is number => u !== null);
 
         return {
           segmentName: segment.segmentName,
@@ -223,8 +341,8 @@ const Index: React.FC = () => {
           forecastData,
           metrics: selectedMetrics.map((metric) => ({
             metric,
-            trainValue: Math.random() * 10,
-            testValue: Math.random() * 15,
+            trainValue: calculateMetrics(trainActuals, trainPredictions, trainLower, trainUpper, metric),
+            testValue: calculateMetrics(testActuals, testPredictions, testLower, testUpper, metric),
           })),
           transformationsApplied: selectedTransformations.map((t) => t.type),
           modelConfig: { model: selectedModel },
