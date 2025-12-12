@@ -401,6 +401,11 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
               Forecast Results
+              <Badge variant="default" className="ml-2 bg-blue-600">
+                {results.modelType === "prophet" ? "Prophet" :
+                 results.modelType === "autogluon" ? "AutoGluon" :
+                 results.modelType.toUpperCase()}
+              </Badge>
             </CardTitle>
             <CardDescription>
               Generated on {new Date(results.timestamp).toLocaleString()}
@@ -687,22 +692,30 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {currentSegmentResult.metrics.map((m) => (
-                    <TableRow key={m.metric}>
-                      <TableCell className="font-medium">
-                        {metricNames[m.metric]}
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          {m.metric.toUpperCase()}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {formatNumber(m.trainValue)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {formatNumber(m.testValue)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {currentSegmentResult.metrics.map((m) => {
+                    const isRSquared = m.metric === "r_squared" || m.metric === "adjusted_r_squared";
+                    const trainIsNegative = isRSquared && m.trainValue < 0;
+                    const testIsNegative = isRSquared && m.testValue < 0;
+
+                    return (
+                      <TableRow key={m.metric}>
+                        <TableCell className="font-medium">
+                          {metricNames[m.metric]}
+                          <Badge variant="outline" className="ml-2 text-xs">
+                            {m.metric.toUpperCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className={`text-right font-mono ${trainIsNegative ? "text-red-500" : ""}`}>
+                          {formatNumber(m.trainValue, 4)}
+                          {trainIsNegative && <span className="ml-1 text-xs">(poor fit)</span>}
+                        </TableCell>
+                        <TableCell className={`text-right font-mono ${testIsNegative ? "text-red-500" : ""}`}>
+                          {formatNumber(m.testValue, 4)}
+                          {testIsNegative && <span className="ml-1 text-xs">(poor fit)</span>}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

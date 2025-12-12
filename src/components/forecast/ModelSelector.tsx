@@ -24,7 +24,7 @@ const modelOptions: ModelOption[] = [
   {
     value: "prophet",
     name: "Prophet",
-    description: "Facebook's robust forecasting model with automatic seasonality detection",
+    description: "Facebook's time series model with automatic seasonality and holiday detection. Best for business forecasting with clear seasonal patterns.",
     icon: <TrendingUp className="h-6 w-6" />,
     features: ["Automatic seasonality", "Holiday effects", "Trend changepoints", "Uncertainty intervals"],
     status: "available",
@@ -32,9 +32,9 @@ const modelOptions: ModelOption[] = [
   {
     value: "autogluon",
     name: "AutoGluon",
-    description: "AutoML framework that automatically trains and ensembles multiple models",
+    description: "AWS AutoML framework that trains multiple models (XGBoost, LightGBM, Neural Networks) and creates an ensemble. Best for complex data with many features.",
     icon: <Zap className="h-6 w-6" />,
-    features: ["Automatic model selection", "Ensemble methods", "Feature engineering", "Multi-model comparison"],
+    features: ["Multi-model ensemble", "Automatic feature engineering", "Deep learning", "Model stacking"],
     status: "available",
   },
   {
@@ -83,6 +83,11 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ selectedModel, onModelCha
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-semibold">{model.name}</span>
+                    {selectedModel === model.value && (
+                      <Badge variant="default" className="text-xs bg-green-600">
+                        Selected
+                      </Badge>
+                    )}
                     {model.status === "coming_soon" && (
                       <Badge variant="secondary" className="text-xs">
                         Coming Soon
