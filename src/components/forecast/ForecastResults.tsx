@@ -1,815 +1,782 @@
-import { useState } from "react";
+import React, { useState, useMemo } from "react";
+import {
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ReferenceLine,
+  Area,
+  ComposedChart,
+} from "recharts";
+import { Download, TrendingUp, AlertCircle, BarChart3, FileText, Table2, LineChart as LineChartIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from "recharts";
-import { TrendingUp, Target, Activity, Wand2, Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ResultsTable } from "./ResultsTable";
-import { toast } from "sonner";
-import html2canvas from "html2canvas";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
-import type { PerformanceMetric } from "@/types/forecast";
+import type { TransformationRecommendation } from "@/types/dataAnalysis";
+import { metricNames } from "@/types/forecast";
 
 interface ForecastResultsProps {
   results: ForecastResultsType;
-  selectedMetrics: PerformanceMetric[];
+  onExport?: (format: "csv" | "json") => void;
+  // Props for transformation comparison
+  originalData?: Record<string, unknown>[];
+  dateColumn?: string;
+  segmentColumn?: string;
+  dependentVariable?: string;
+  selectedTransformations?: TransformationRecommendation[];
 }
 
-const metricLabels: Record<PerformanceMetric, string> = {
-  mae: "MAE",
-  rmse: "RMSE",
-  mape: "MAPE",
-  mse: "MSE",
-  r2: "R²",
-  adj_r2: "Adjusted R²",
-  coverage: "Coverage",
-  smape: "SMAPE",
-  mase: "MASE",
-};
+const ForecastResults: React.FC<ForecastResultsProps> = ({
+  results,
+  onExport,
+  originalData,
+  dateColumn,
+  segmentColumn,
+  dependentVariable,
+  selectedTransformations,
+}) => {
+  const [selectedSegment, setSelectedSegment] = useState<string>(
+    results.segmentResults[0]?.segmentName || ""
+  );
 
-export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsProps) => {
-  const [exportDialog, setExportDialog] = useState(false);
-  const [reportName, setReportName] = useState("");
-  const [exportFormat, setExportFormat] = useState<"csv" | "html" | "pdf">("pdf");
+  const currentSegmentResult = results.segmentResults.find(
+    (r) => r.segmentName === selectedSegment
+  );
 
-  // Helper to check if a value is valid (not NaN, null, or undefined)
-  const isValidNumber = (value: any): value is number => {
-    return typeof value === 'number' && !isNaN(value) && isFinite(value);
-  };
+  // Apply transformations to data
+  const applyTransformations = (values: number[], transformations: TransformationRecommendation[]): number[] => {
+    let result = [...values];
 
-  // Helper to generate confidence interval legend labels
-  const getConfidenceLabels = (segment: any) => {
-    const intervalWidth = segment.interval_width ?? 0.80;
-    const lowerBound = segment.lower_bound;
-    const upperBound = segment.upper_bound;
-    
-    if (lowerBound !== undefined && upperBound !== undefined) {
-      // Custom percentiles specified
-      return {
-        lower: `Lower Bound (${(lowerBound * 100).toFixed(0)}%)`,
-        upper: `Upper Bound (${(upperBound * 100).toFixed(0)}%)`
-      };
-    } else {
-      // Using interval_width
-      const lowerPercentile = ((1 - intervalWidth) / 2 * 100).toFixed(0);
-      const upperPercentile = ((1 + intervalWidth) / 2 * 100).toFixed(0);
-      return {
-        lower: `Lower Bound (${lowerPercentile}%)`,
-        upper: `Upper Bound (${upperPercentile}%)`
-      };
-    }
-  };
-
-  const openExport = (format: "csv" | "html" | "pdf") => {
-    setExportFormat(format);
-    setReportName(`Forecast_${new Date().toISOString().split('T')[0]}`);
-    setExportDialog(true);
-  };
-
-  const exportCSV = () => {
-    let csv = "Segment,Date,Actual,Predicted,Lower,Upper,Type\n";
-    results.segments.forEach(seg => {
-      [...seg.training_data.map(d => ({...d, type: 'Train'})),
-       ...seg.test_data.map(d => ({...d, type: 'Test'})),
-       ...seg.forecast_data.map(d => ({...d, type: 'Forecast'}))
-      ].forEach(row => {
-        csv += `${seg.segment},${row.date},${row.actual||''},${row.predicted},${row.lower_bound||''},${row.upper_bound||''},${row.type}\n`;
-      });
-    });
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${reportName}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("CSV downloaded");
-  };
-
-  const exportHTML = async () => {
-    toast.loading("Capturing charts...");
-    let html = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>${reportName}</title>
-<style>
-  body{font-family:Arial;margin:40px;background:#fff}
-  h1{color:#333;border-bottom:3px solid #4f46e5;padding-bottom:10px}
-  h2{color:#4f46e5;margin-top:30px}
-  .meta{color:#666;margin-bottom:30px}
-  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin:20px 0}
-  .metric{padding:15px;background:#f9fafb;border-left:4px solid #4f46e5}
-  .metric-label{font-size:12px;color:#666}
-  .metric-value{font-size:24px;font-weight:bold}
-  .chart{margin:30px 0}
-  .chart img{max-width:100%;border:1px solid #e5e7eb}
-  .ai{background:#eff6ff;padding:20px;margin:20px 0;border-left:4px solid #3b82f6}
-  @media print{body{margin:20px}}
-</style></head><body>
-<h1>${reportName}</h1>
-<div class="meta"><p><strong>Model:</strong> ${results.model}</p>
-<p><strong>Generated:</strong> ${new Date(results.timestamp).toLocaleString()}</p></div>`;
-
-    for (const seg of results.segments) {
-      html += `<h2>${seg.segment}</h2>`;
-      if (seg.metrics) {
-        html += '<div class="metrics">';
-        selectedMetrics.forEach(m => {
-          const v = seg.metrics?.[m];
-          if (v !== undefined) {
-            const isPct = ['mape','coverage','smape','r2','adj_r2'].includes(m);
-            html += `<div class="metric">
-              <div class="metric-label">${metricLabels[m]}</div>
-              <div class="metric-value">${v.toFixed(['r2','adj_r2'].includes(m) ? 3 : isPct ? 1 : 2)}${isPct && !['r2','adj_r2'].includes(m) ? '%' : ''}</div>
-            </div>`;
+    transformations.forEach((transform) => {
+      switch (transform.type) {
+        case "log":
+          result = result.map((v) => (v > 0 ? Math.log(v) : 0));
+          break;
+        case "sqrt":
+          result = result.map((v) => (v >= 0 ? Math.sqrt(v) : 0));
+          break;
+        case "difference":
+          const diffResult: number[] = [];
+          for (let i = 1; i < result.length; i++) {
+            diffResult.push(result[i] - result[i - 1]);
           }
-        });
-        html += '</div>';
+          result = diffResult;
+          break;
+        case "seasonal_difference":
+          const period = transform.parameters?.seasonalPeriod || 12;
+          const seasonalResult: number[] = [];
+          for (let i = period; i < result.length; i++) {
+            seasonalResult.push(result[i] - result[i - period]);
+          }
+          result = seasonalResult;
+          break;
+        case "box_cox":
+          const lambda = transform.parameters?.lambda || 0.5;
+          if (lambda === 0) {
+            result = result.map((v) => (v > 0 ? Math.log(v) : 0));
+          } else {
+            result = result.map((v) => (v > 0 ? (Math.pow(v, lambda) - 1) / lambda : 0));
+          }
+          break;
       }
-      if (seg.ai_commentary) {
-        html += `<div class="ai"><strong>AI Commentary:</strong><p>${seg.ai_commentary.replace(/\n/g,'<br>')}</p></div>`;
-      }
+    });
 
-      const charts = document.querySelectorAll(`[data-seg="${seg.segment}"] .recharts-wrapper`);
-      for (let i = 0; i < charts.length; i++) {
-        const canvas = await html2canvas(charts[i] as HTMLElement);
-        html += `<div class="chart"><img src="${canvas.toDataURL()}" alt="Chart ${i+1}"/></div>`;
-      }
-    }
-    html += '</body></html>';
-
-    if (exportFormat === 'pdf') {
-      const printWindow = window.open('', '', 'width=800,height=600');
-      if (printWindow) {
-        printWindow.document.write(html);
-        printWindow.document.close();
-        setTimeout(() => {
-          printWindow.print();
-          toast.success("Print dialog opened");
-        }, 500);
-      }
-    } else {
-      const blob = new Blob([html], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${reportName}.html`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("HTML report downloaded");
-    }
-    setExportDialog(false);
+    return result;
   };
 
-  const doExport = () => {
-    if (exportFormat === 'csv') exportCSV();
-    else exportHTML();
+  // Prepare transformation comparison data
+  const transformationComparisonData = useMemo(() => {
+    // Check required props - but allow empty transformations array
+    if (!originalData || !dateColumn || !dependentVariable) {
+      return null;
+    }
+
+    // Filter data by selected segment
+    let segmentData = originalData;
+    if (segmentColumn && selectedSegment && selectedSegment !== "All Data") {
+      segmentData = originalData.filter(
+        (row) => String(row[segmentColumn]) === selectedSegment
+      );
+    }
+
+    const values = segmentData
+      .map((row) => Number(row[dependentVariable]))
+      .filter((v) => !isNaN(v));
+
+    if (values.length === 0) return null;
+
+    // Use empty array as default if selectedTransformations is undefined
+    const transformations = selectedTransformations || [];
+
+    const transformedValues = transformations.length > 0
+      ? applyTransformations(values, transformations)
+      : [...values]; // Clone if no transformations
+
+    // Calculate date offset for alignment
+    let dateOffset = 0;
+    transformations.forEach((t) => {
+      if (t.type === "difference") dateOffset += 1;
+      if (t.type === "seasonal_difference") dateOffset += (t.parameters?.seasonalPeriod || 12);
+    });
+
+    // Helper to format date for display - use frequency-aware formatting
+    const formatDateStr = (dateVal: unknown): string => {
+      if (!dateVal) return '';
+      const str = String(dateVal);
+
+      // Handle YYYY/MM/DD format (with slashes) - monthly data
+      if (/^\d{4}\/\d{2}\/\d{2}$/.test(str)) {
+        const [year, month] = str.split('/');
+        return new Date(parseInt(year), parseInt(month) - 1, 1)
+          .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+
+      // Handle YYYY-MM-DD format (with dashes)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        const [year, month, day] = str.split('-');
+        const d = parseInt(day);
+        if (d === 1 || d >= 28) {
+          return new Date(parseInt(year), parseInt(month) - 1, d)
+            .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        }
+        return new Date(parseInt(year), parseInt(month) - 1, d)
+          .toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+      }
+
+      // Handle YYYY-MM format directly
+      if (/^\d{4}-\d{2}$/.test(str)) {
+        const [year, month] = str.split('-');
+        return new Date(parseInt(year), parseInt(month) - 1, 1)
+          .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+
+      try {
+        const date = new Date(str);
+        if (!isNaN(date.getTime())) {
+          const day = date.getDate();
+          if (day === 1 || day >= 28) {
+            return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+          }
+          return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+        }
+      } catch {
+        // Fall through
+      }
+      return str.length > 10 ? str.slice(0, 10) : str;
+    };
+
+    // Original data - use segmentData for dates
+    const beforeData = values.map((val, i) => {
+      const dateValue = segmentData[i]?.[dateColumn];
+      return {
+        date: formatDateStr(dateValue) || `Point ${i + 1}`,
+        value: val,
+      };
+    });
+
+    // Transformed data - use segmentData for dates
+    const afterData = transformedValues.map((val, i) => {
+      const dateIndex = Math.min(i + dateOffset, segmentData.length - 1);
+      const dateValue = segmentData[dateIndex]?.[dateColumn];
+      return {
+        date: formatDateStr(dateValue) || `Point ${i + 1}`,
+        value: Number.isFinite(val) ? val : 0,
+      };
+    });
+
+    return { beforeData, afterData, hasTransformations: transformations.length > 0 };
+  }, [originalData, dateColumn, segmentColumn, selectedSegment, dependentVariable, selectedTransformations]);
+
+  const formatNumber = (num: number | null, decimals = 4): string => {
+    if (num === null || num === undefined) return "N/A";
+    return num.toFixed(decimals);
   };
 
-  if (!results || !results.segments || results.segments.length === 0) {
+  // Download helper functions
+  const downloadCSV = (data: string, filename: string) => {
+    const blob = new Blob([data], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadForecast = () => {
+    if (!currentSegmentResult) return;
+
+    const headers = ['Date', 'Actual', 'Predicted', 'Lower Bound', 'Upper Bound', 'Type'];
+    const rows = currentSegmentResult.forecastData.map((point) => [
+      point.date,
+      point.actual ?? '',
+      point.predicted ?? '',
+      point.lowerBound ?? '',
+      point.upperBound ?? '',
+      point.isForecast ? 'Forecast' : point.isTestSet ? 'Test' : 'Train'
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.join(','))
+    ].join('\n');
+
+    downloadCSV(csvContent, `forecast_${selectedSegment}_${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
+  const handleDownloadMetrics = () => {
+    if (!currentSegmentResult) return;
+
+    const headers = ['Metric', 'Full Name', 'Training Value', 'Test Value'];
+    const rows = currentSegmentResult.metrics.map((m) => [
+      m.metric.toUpperCase(),
+      metricNames[m.metric] || m.metric,
+      m.trainValue ?? '',
+      m.testValue ?? ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.join(','))
+    ].join('\n');
+
+    downloadCSV(csvContent, `metrics_${selectedSegment}_${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
+  const handleDownloadOriginalData = () => {
+    if (!originalData || originalData.length === 0) return;
+
+    // Get all column names from the first row
+    const headers = Object.keys(originalData[0]);
+
+    // Filter by segment if applicable
+    let dataToExport = originalData;
+    if (segmentColumn && selectedSegment && selectedSegment !== "All Data") {
+      dataToExport = originalData.filter(
+        (row) => String(row[segmentColumn]) === selectedSegment
+      );
+    }
+
+    const rows = dataToExport.map((row) =>
+      headers.map((h) => {
+        const val = row[h];
+        // Escape commas and quotes
+        if (typeof val === 'string' && (val.includes(',') || val.includes('"'))) {
+          return `"${val.replace(/"/g, '""')}"`;
+        }
+        return val ?? '';
+      })
+    );
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.join(','))
+    ].join('\n');
+
+    downloadCSV(csvContent, `data_${selectedSegment}_${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
+  // Detect if dates are monthly based on frequency setting or data pattern
+  const isMonthlyData = useMemo(() => {
+    if (!currentSegmentResult) return false;
+    // Check frequency setting first - MS (monthly), QS (quarterly), YS (yearly) should show without day
+    const freq = currentSegmentResult.frequency;
+    if (freq === 'MS' || freq === 'QS' || freq === 'YS') return true;
+
+    // Fallback: check data pattern
+    const dates = currentSegmentResult.forecastData.slice(0, 10).map((p) => {
+      try {
+        return new Date(p.date);
+      } catch {
+        return null;
+      }
+    }).filter((d): d is Date => d !== null && !isNaN(d.getTime()));
+
+    if (dates.length === 0) return false;
+
+    // Check if all dates are on day 1
+    const allDay1 = dates.every((d) => d.getDate() === 1);
+    if (allDay1) return true;
+
+    // Check if gaps are ~28-31 days (monthly)
+    if (dates.length >= 2) {
+      const gaps = dates.slice(1).map((d, i) => (d.getTime() - dates[i].getTime()) / (1000 * 60 * 60 * 24));
+      const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+      return avgGap >= 25;
+    }
+    return false;
+  }, [currentSegmentResult]);
+
+  const formatDate = (dateStr: string): string => {
+    try {
+      // Handle YYYY/MM/DD format (with slashes) - monthly data
+      if (/^\d{4}\/\d{2}\/\d{2}$/.test(dateStr)) {
+        const [year, month] = dateStr.split('/');
+        return new Date(parseInt(year), parseInt(month) - 1, 1)
+          .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+
+      // Handle YYYY-MM-DD format (with dashes)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        const [year, month, day] = dateStr.split('-');
+        const d = parseInt(day);
+        if (d === 1 || d >= 28 || isMonthlyData) {
+          return new Date(parseInt(year), parseInt(month) - 1, d)
+            .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        }
+        return new Date(parseInt(year), parseInt(month) - 1, d)
+          .toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+      }
+
+      // Handle YYYY-MM format directly
+      if (/^\d{4}-\d{2}$/.test(dateStr)) {
+        const [year, month] = dateStr.split('-');
+        return new Date(parseInt(year), parseInt(month) - 1, 1)
+          .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) {
+        return dateStr;
+      }
+      if (isMonthlyData) {
+        return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+      return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  if (!currentSegmentResult) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>No Results Available</CardTitle>
-          <CardDescription>Run a forecast to see results here</CardDescription>
-        </CardHeader>
+        <CardContent className="p-8 text-center">
+          <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <p className="text-muted-foreground">No forecast results available</p>
+        </CardContent>
       </Card>
     );
   }
 
+  // Prepare chart data
+  const chartData = currentSegmentResult.forecastData.map((point) => ({
+    date: formatDate(point.date),
+    actual: point.actual,
+    predicted: point.predicted,
+    lower: point.lowerBound,
+    upper: point.upperBound,
+    isForecast: point.isForecast,
+    isTest: point.isTestSet,
+  }));
+
+  // Find the split point for visualization
+  const testStartIndex = chartData.findIndex((d) => d.isTest);
+  const forecastStartIndex = chartData.findIndex((d) => d.isForecast);
+
+  const hasTransformations = transformationComparisonData?.hasTransformations ?? false;
+
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-2xl">Forecast Results</CardTitle>
-              <CardDescription>
-                Model: {results.model} | Generated: {new Date(results.timestamp).toLocaleString()}
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={() => openExport('csv')} variant="outline" size="sm">
-                <Download className="mr-2 h-4 w-4" />
-                CSV
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Forecast Results
+              <Badge variant="default" className="ml-2 bg-blue-600">
+                {results.modelType === "prophet" ? "Prophet" :
+                 results.modelType === "autogluon" ? "AutoGluon" :
+                 results.modelType.toUpperCase()}
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Generated on {new Date(results.timestamp).toLocaleString()}
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            {results.segmentResults.length > 1 && (
+              <Select value={selectedSegment} onValueChange={setSelectedSegment}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Select segment" />
+                </SelectTrigger>
+                <SelectContent>
+                  {results.segmentResults.map((result) => (
+                    <SelectItem key={result.segmentName} value={result.segmentName}>
+                      {result.segmentName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" onClick={handleDownloadForecast} title="Download Forecast">
+                <LineChartIcon className="h-4 w-4 mr-1" />
+                Forecast
               </Button>
-              <Button onClick={() => openExport('html')} variant="outline" size="sm">
-                <Download className="mr-2 h-4 w-4" />
-                HTML
+              <Button variant="outline" size="sm" onClick={handleDownloadMetrics} title="Download Metrics">
+                <Table2 className="h-4 w-4 mr-1" />
+                Metrics
               </Button>
-              <Button onClick={() => openExport('pdf')} variant="outline" size="sm">
-                <Download className="mr-2 h-4 w-4" />
-                PDF
-              </Button>
+              {originalData && originalData.length > 0 && (
+                <Button variant="outline" size="sm" onClick={handleDownloadOriginalData} title="Download Data">
+                  <FileText className="h-4 w-4 mr-1" />
+                  Data
+                </Button>
+              )}
             </div>
           </div>
-        </CardHeader>
-      </Card>
-
-      <Dialog open={exportDialog} onOpenChange={setExportDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Export Report</DialogTitle>
-            <DialogDescription>
-              Name your report and select format
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="reportName">Report Name</Label>
-              <Input
-                id="reportName"
-                value={reportName}
-                onChange={(e) => setReportName(e.target.value)}
-                placeholder="Enter report name"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setExportDialog(false)}>Cancel</Button>
-            <Button onClick={doExport}>Export</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Tabs defaultValue={results.segments[0].segment} className="w-full">
-        <TabsList className="grid w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 h-auto">
-          {results.segments.map((segment, idx) => (
-            <TabsTrigger key={idx} value={segment.segment} className="flex-1 min-w-[120px]">
-              {segment.segment}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Tabs defaultValue="chart" className="w-full">
+          <TabsList>
+            <TabsTrigger value="chart">Forecast</TabsTrigger>
+            <TabsTrigger value="comparison">
+              <BarChart3 className="h-4 w-4 mr-1" />
+              Before/After
             </TabsTrigger>
-          ))}
-        </TabsList>
+            <TabsTrigger value="metrics">Metrics</TabsTrigger>
+            <TabsTrigger value="data">Data</TabsTrigger>
+          </TabsList>
 
-        {results.segments.map((segment, idx) => (
-          <TabsContent key={idx} value={segment.segment} className="space-y-6" data-seg={segment.segment}>
-            {/* Metrics Card - Primary Model */}
-            {segment.metrics && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Target className="h-4 w-4" />
-                    Model Performance: {segment.model || results.model}
-                    {segment.transformations_applied && segment.transformations_applied.length > 0 && (
-                      <Badge variant="secondary" className="ml-2">
-                        Transformations Applied
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  {segment.transformations_applied && segment.transformations_applied.length > 0 && (
-                    <CardDescription>
-                      Applied transformations: {segment.transformations_applied.join(', ')}
-                      {segment.benchmark_model && ` | Benchmark: ${segment.benchmark_model}`}
-                    </CardDescription>
+          {/* Chart Tab */}
+          <TabsContent value="chart" className="mt-4">
+            <div className="h-[400px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 12 }}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis tick={{ fontSize: 12 }} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
+                    }}
+                  />
+                  <Legend />
+
+                  {/* Confidence interval area */}
+                  <Area
+                    type="monotone"
+                    dataKey="upper"
+                    stroke="none"
+                    fill="hsl(var(--primary))"
+                    fillOpacity={0.1}
+                    name="Upper Bound"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="lower"
+                    stroke="none"
+                    fill="hsl(var(--background))"
+                    fillOpacity={1}
+                    name="Lower Bound"
+                  />
+
+                  {/* Actual values */}
+                  <Line
+                    type="monotone"
+                    dataKey="actual"
+                    stroke="hsl(var(--foreground))"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Actual"
+                  />
+
+                  {/* Predicted values */}
+                  <Line
+                    type="monotone"
+                    dataKey="predicted"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={false}
+                    name="Predicted"
+                  />
+
+                  {/* Reference lines for splits */}
+                  {testStartIndex > 0 && (
+                    <ReferenceLine
+                      x={chartData[testStartIndex]?.date}
+                      stroke="hsl(var(--muted-foreground))"
+                      strokeDasharray="3 3"
+                      label={{ value: "Test Start", position: "top", fontSize: 10 }}
+                    />
                   )}
-                  {!segment.transformations_applied && segment.benchmark_model && (
-                    <CardDescription>
-                      Comparing with AI-recommended benchmark: {segment.benchmark_model}
-                    </CardDescription>
+                  {forecastStartIndex > 0 && (
+                    <ReferenceLine
+                      x={chartData[forecastStartIndex]?.date}
+                      stroke="hsl(var(--primary))"
+                      strokeDasharray="3 3"
+                      label={{ value: "Forecast Start", position: "top", fontSize: 10 }}
+                    />
                   )}
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {selectedMetrics.map((metric) => {
-                      const value = segment.metrics?.[metric];
-                      const rawValue = segment.raw_metrics?.[metric];
-                      const benchmarkValue = segment.benchmark_metrics?.[metric];
-                      if (value === undefined) return null;
-                      
-                      const isPercentage = ['mape', 'coverage', 'smape', 'r2', 'adj_r2'].includes(metric);
-                      const isBetterThanRaw = rawValue !== undefined && (
-                        ['mae', 'rmse', 'mse', 'mape', 'smape', 'mase'].includes(metric) 
-                          ? value < rawValue 
-                          : value > rawValue
-                      );
-                      const isBetterThanBenchmark = benchmarkValue !== undefined && (
-                        ['mae', 'rmse', 'mse', 'mape', 'smape', 'mase'].includes(metric) 
-                          ? value < benchmarkValue 
-                          : value > benchmarkValue
-                      );
-                      
-                      return (
-                        <div key={metric} className="space-y-1">
-                          <p className="text-xs text-muted-foreground">{metricLabels[metric]}</p>
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-baseline gap-2">
-                              <p className={`text-2xl font-bold ${(isBetterThanRaw || isBetterThanBenchmark) ? 'text-green-600' : ''}`}>
-                                {value.toFixed(['r2', 'adj_r2'].includes(metric) ? 3 : isPercentage ? 1 : 2)}
-                                {isPercentage && !['r2', 'adj_r2'].includes(metric) ? '%' : ''}
-                              </p>
-                              {rawValue !== undefined && (
-                                <p className="text-xs text-muted-foreground">
-                                  vs raw {rawValue.toFixed(['r2', 'adj_r2'].includes(metric) ? 3 : isPercentage ? 1 : 2)}
-                                  {isPercentage && !['r2', 'adj_r2'].includes(metric) ? '%' : ''}
-                                </p>
-                              )}
-                            </div>
-                            {benchmarkValue !== undefined && (
-                              <p className="text-xs text-muted-foreground">
-                                vs {segment.benchmark_model} {benchmarkValue.toFixed(['r2', 'adj_r2'].includes(metric) ? 3 : isPercentage ? 1 : 2)}
-                                {isPercentage && !['r2', 'adj_r2'].includes(metric) ? '%' : ''}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="flex gap-4 mt-4 justify-center text-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-0.5 bg-foreground"></div>
+                <span>Actual</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-0.5 bg-primary" style={{ borderStyle: "dashed" }}></div>
+                <span>Predicted</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-primary/10 rounded"></div>
+                <span>Confidence Interval</span>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Transformation Comparison Tab */}
+          <TabsContent value="comparison" className="mt-4">
+            {transformationComparisonData ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">Data Transformation Comparison</h3>
+                  {hasTransformations && (
+                    <div className="flex gap-2">
+                      {selectedTransformations?.map((t) => (
+                        <Badge key={t.type} variant="secondary">
+                          {t.type === "log" ? "Log" :
+                           t.type === "difference" ? "Diff(1)" :
+                           t.type === "seasonal_difference" ? `Seasonal(${t.parameters?.seasonalPeriod || 12})` :
+                           t.type === "sqrt" ? "Sqrt" :
+                           t.type === "box_cox" ? "Box-Cox" : t.type}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Before Transformation */}
+                  <div className="border-2 rounded-lg p-4 bg-blue-50/30">
+                    <h4 className="text-sm font-medium mb-2 text-center text-blue-700">Original Data (Before)</h4>
+                    <div className="h-[250px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={transformationComparisonData.beforeData}
+                          margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fontSize: 9, fill: '#6b7280' }}
+                            interval="preserveStartEnd"
+                            axisLine={{ stroke: '#9ca3af' }}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 9, fill: '#6b7280' }}
+                            width={60}
+                            axisLine={{ stroke: '#9ca3af' }}
+                            tickFormatter={(val) => typeof val === 'number' ? val.toFixed(2) : val}
+                          />
+                          <Tooltip
+                            formatter={(value: number) => [value?.toFixed(4), 'Value']}
+                            contentStyle={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="value"
+                            stroke="#2563eb"
+                            strokeWidth={2}
+                            dot={{ r: 2, fill: '#2563eb', stroke: '#2563eb' }}
+                            activeDot={{ r: 4, fill: '#2563eb' }}
+                            connectNulls={true}
+                            isAnimationActive={false}
+                            name="Original"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="text-xs text-center text-muted-foreground mt-2">
+                      {transformationComparisonData.beforeData.length} data points
+                    </div>
                   </div>
 
-                  {segment.ai_commentary && (
-                    <Alert className="bg-primary/5 border-primary/20">
-                      <Wand2 className="h-4 w-4" />
-                      <AlertDescription>
-                        <p className="font-semibold text-sm mb-2">AI Analysis</p>
-                        <p className="text-sm whitespace-pre-line">{segment.ai_commentary}</p>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Transformation Impact Comparison - Separate Charts */}
-            {segment.raw_test_data && segment.raw_metrics && segment.test_data.length > 0 && (
-              <div className="space-y-6">
-                {/* Transformed Data Chart */}
-                <Card className="border-green-500/30 bg-green-50/10">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Activity className="h-4 w-4 text-green-600" />
-                      Test Set Performance: With Transformations
-                    </CardTitle>
-                    <CardDescription>
-                      Model predictions on test data with transformations applied
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={segment.test_data
-                        .filter((d) => isValidNumber(d.actual) && isValidNumber(d.predicted))
-                        .map((d) => ({
-                          date: d.date,
-                          actual: d.actual,
-                          predicted: d.predicted,
-                        }))}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis 
-                          dataKey="date" 
-                          className="text-xs"
-                          tickFormatter={(value) => new Date(value).toLocaleDateString()}
-                        />
-                        <YAxis className="text-xs" />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--popover))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '0.5rem',
-                          }}
-                          labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                          formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
-                        />
-                        <Legend />
-                        <Line
-                          type="monotone"
-                          dataKey="actual"
-                          stroke="rgb(37, 99, 235)"
-                          strokeWidth={2.5}
-                          dot={{ fill: 'rgb(37, 99, 235)', r: 4 }}
-                          name="Actual"
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="predicted"
-                          stroke="rgb(34, 197, 94)"
-                          strokeWidth={2.5}
-                          strokeDasharray="5 5"
-                          dot={{ fill: 'rgb(34, 197, 94)', r: 3 }}
-                          name="Predicted (Transformed)"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                      <p className="text-sm font-semibold text-green-800 mb-2">Performance Metrics</p>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {selectedMetrics.map(metric => {
-                          const value = segment.metrics?.[metric];
-                          if (value === undefined) return null;
-                          const isPercentage = ['mape', 'coverage', 'smape', 'r2', 'adj_r2'].includes(metric);
-                          return (
-                            <div key={metric} className="flex justify-between text-xs">
-                              <span className="text-green-700">{metricLabels[metric]}:</span>
-                              <span className="font-semibold text-green-900">
-                                {value.toFixed(['r2', 'adj_r2'].includes(metric) ? 3 : isPercentage ? 1 : 2)}
-                                {isPercentage && !['r2', 'adj_r2'].includes(metric) ? '%' : ''}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
+                  {/* After Transformation */}
+                  <div className="border-2 rounded-lg p-4 bg-green-50/30">
+                    <h4 className="text-sm font-medium mb-2 text-center text-green-700">
+                      After Transformation
+                      {!hasTransformations && " (No transformation applied)"}
+                    </h4>
+                    <div className="h-[250px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={transformationComparisonData.afterData}
+                          margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fontSize: 9, fill: '#6b7280' }}
+                            interval="preserveStartEnd"
+                            axisLine={{ stroke: '#9ca3af' }}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 9, fill: '#6b7280' }}
+                            width={60}
+                            axisLine={{ stroke: '#9ca3af' }}
+                            tickFormatter={(val) => typeof val === 'number' ? val.toFixed(2) : val}
+                          />
+                          <Tooltip
+                            formatter={(value: number) => [value?.toFixed(4), 'Value']}
+                            contentStyle={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="value"
+                            stroke="#16a34a"
+                            strokeWidth={2}
+                            dot={{ r: 2, fill: '#16a34a', stroke: '#16a34a' }}
+                            activeDot={{ r: 4, fill: '#16a34a' }}
+                            connectNulls={true}
+                            isAnimationActive={false}
+                            name="Transformed"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Raw Data Chart */}
-                <Card className="border-red-500/30 bg-red-50/10">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Activity className="h-4 w-4 text-red-600" />
-                      Test Set Performance: Without Transformations (Raw)
-                    </CardTitle>
-                    <CardDescription>
-                      Model predictions on test data without transformations
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={segment.raw_test_data
-                        .filter((d) => isValidNumber(d.actual) && isValidNumber(d.predicted))
-                        .map((d) => ({
-                          date: d.date,
-                          actual: d.actual,
-                          predicted: d.predicted,
-                        }))}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis 
-                          dataKey="date" 
-                          className="text-xs"
-                          tickFormatter={(value) => new Date(value).toLocaleDateString()}
-                        />
-                        <YAxis className="text-xs" />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--popover))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '0.5rem',
-                          }}
-                          labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                          formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
-                        />
-                        <Legend />
-                        <Line
-                          type="monotone"
-                          dataKey="actual"
-                          stroke="rgb(37, 99, 235)"
-                          strokeWidth={2.5}
-                          dot={{ fill: 'rgb(37, 99, 235)', r: 4 }}
-                          name="Actual"
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="predicted"
-                          stroke="rgb(239, 68, 68)"
-                          strokeWidth={2.5}
-                          strokeDasharray="3 3"
-                          dot={{ fill: 'rgb(239, 68, 68)', r: 3 }}
-                          name="Predicted (Raw)"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                      <p className="text-sm font-semibold text-red-800 mb-2">Performance Metrics</p>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {selectedMetrics.map(metric => {
-                          const value = segment.raw_metrics?.[metric];
-                          if (value === undefined) return null;
-                          const isPercentage = ['mape', 'coverage', 'smape', 'r2', 'adj_r2'].includes(metric);
-                          return (
-                            <div key={metric} className="flex justify-between text-xs">
-                              <span className="text-red-700">{metricLabels[metric]}:</span>
-                              <span className="font-semibold text-red-900">
-                                {value.toFixed(['r2', 'adj_r2'].includes(metric) ? 3 : isPercentage ? 1 : 2)}
-                                {isPercentage && !['r2', 'adj_r2'].includes(metric) ? '%' : ''}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
+                    <div className="text-xs text-center text-muted-foreground mt-2">
+                      {transformationComparisonData.afterData.length} data points
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No transformation comparison data available.</p>
+                <p className="text-sm mt-2">Make sure data is loaded and variables are configured.</p>
               </div>
             )}
-
-            {/* Alert when no test data available */}
-            {segment.raw_test_data && segment.raw_metrics && segment.test_data.length === 0 && (
-              <Alert className="border-yellow-500/30 bg-yellow-50/10">
-                <AlertDescription>
-                  <p className="font-semibold text-sm mb-2">No Test Data Available</p>
-                  <p className="text-sm">
-                    After applying transformations, there is insufficient data for the test set. This can happen with transformations like "difference" that reduce the dataset size. Performance metrics cannot be calculated without test data.
-                  </p>
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* Complete Time Series - Transformed Data */}
-            <Card className="border-green-500/30 bg-green-50/10">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-green-600" />
-                  Complete Time Series: With Transformations
-                  {segment.transformations_applied && (
-                    <Badge variant="secondary" className="ml-2">
-                      {segment.transformations_applied.join(', ')}
-                    </Badge>
-                  )}
-                </CardTitle>
-                <CardDescription>
-                  Training data, test predictions, and future forecast with transformations applied
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-2 mb-4 flex-wrap">
-                  <Badge variant="outline" className="bg-blue-500/10 border-blue-500/30">
-                    <div className="w-3 h-3 rounded-full bg-blue-600 mr-2" />
-                    Actual Data
-                  </Badge>
-                  <Badge variant="outline" className="bg-orange-500/10 border-orange-500/30">
-                    <div className="w-3 h-3 rounded-full bg-orange-600 mr-2" />
-                    Fitted (Test)
-                  </Badge>
-                  <Badge variant="outline" className="bg-purple-500/10 border-purple-500/30">
-                    <div className="w-3 h-3 rounded-full bg-purple-600 mr-2" />
-                    Forecast
-                  </Badge>
-                  <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/30">
-                    <div className="w-3 h-3 bg-emerald-600/40 mr-2" />
-                    95% Confidence
-                  </Badge>
-                </div>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <AreaChart data={(() => {
-                      const trainingData = segment.training_data || [];
-                      const testData = segment.test_data || [];
-                      const forecastData = segment.forecast_data || [];
-                      const allData = [...trainingData, ...testData, ...forecastData];
-                      
-                      return allData.map((point, idx) => {
-                        const testStartIdx = trainingData.length;
-                        const testEndIdx = testStartIdx + testData.length;
-                        const forecastStartIdx = testEndIdx;
-                        
-                        let fitted = null;
-                        let forecast = null;
-                        
-                        if (idx >= testStartIdx && idx < testEndIdx) {
-                          fitted = point.predicted;
-                        } else if (idx >= forecastStartIdx) {
-                          forecast = point.predicted;
-                        }
-                        
-                        return {
-                          date: point.date,
-                          actual: isValidNumber(point.actual) ? point.actual : null,
-                          fitted: isValidNumber(fitted) ? fitted : null,
-                          forecast: isValidNumber(forecast) ? forecast : null,
-                          lower_bound: isValidNumber(point.lower_bound) ? point.lower_bound : null,
-                          upper_bound: isValidNumber(point.upper_bound) ? point.upper_bound : null,
-                        };
-                      });
-                    })()}>
-                    <defs>
-                      <linearGradient id={`confidenceGradient-transformed-${segment.segment}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="rgb(16, 185, 129)" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="rgb(16, 185, 129)" stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis 
-                      dataKey="date" 
-                      className="text-xs"
-                      tickFormatter={(value) => new Date(value).toLocaleDateString()}
-                    />
-                    <YAxis className="text-xs" />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'hsl(var(--popover))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '0.5rem',
-                      }}
-                      labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                      formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
-                    />
-                    <Legend />
-                    
-                    <Area
-                      type="monotone"
-                      dataKey="upper_bound"
-                      stroke="rgb(16, 185, 129)"
-                      strokeWidth={1}
-                      strokeOpacity={0.3}
-                      fill={`url(#confidenceGradient-transformed-${segment.segment})`}
-                      name={getConfidenceLabels(segment).upper}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="lower_bound"
-                      stroke="rgb(16, 185, 129)"
-                      strokeWidth={1}
-                      strokeOpacity={0.3}
-                      fill={`url(#confidenceGradient-transformed-${segment.segment})`}
-                      name={getConfidenceLabels(segment).lower}
-                    />
-                    
-                    <Line
-                      type="monotone"
-                      dataKey="actual"
-                      stroke="rgb(37, 99, 235)"
-                      strokeWidth={2.5}
-                      dot={false}
-                      name="Actual Data"
-                      connectNulls={true}
-                    />
-                    
-                    <Line
-                      type="monotone"
-                      dataKey="fitted"
-                      stroke="rgb(249, 115, 22)"
-                      strokeWidth={2.5}
-                      strokeDasharray="5 5"
-                      dot={{ fill: 'rgb(249, 115, 22)', r: 3 }}
-                      name="Fitted (Test)"
-                      connectNulls={true}
-                    />
-                    
-                    <Line
-                      type="monotone"
-                      dataKey="forecast"
-                      stroke="rgb(147, 51, 234)"
-                      strokeWidth={2.5}
-                      strokeDasharray="8 4"
-                      dot={{ fill: 'rgb(147, 51, 234)', r: 3 }}
-                      name="Forecast"
-                      connectNulls={true}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Complete Time Series - Raw Data */}
-            {segment.raw_training_data && segment.raw_test_data && segment.raw_forecast_data && (
-              <Card className="border-red-500/30 bg-red-50/10">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-red-600" />
-                    Complete Time Series: Without Transformations (Raw)
-                  </CardTitle>
-                  <CardDescription>
-                    Training data, test predictions, and future forecast without transformations
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex gap-2 mb-4 flex-wrap">
-                    <Badge variant="outline" className="bg-blue-500/10 border-blue-500/30">
-                      <div className="w-3 h-3 rounded-full bg-blue-600 mr-2" />
-                      Actual Data
-                    </Badge>
-                    <Badge variant="outline" className="bg-orange-500/10 border-orange-500/30">
-                      <div className="w-3 h-3 rounded-full bg-orange-600 mr-2" />
-                      Fitted (Test)
-                    </Badge>
-                    <Badge variant="outline" className="bg-purple-500/10 border-purple-500/30">
-                      <div className="w-3 h-3 rounded-full bg-purple-600 mr-2" />
-                      Forecast
-                    </Badge>
-                    <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/30">
-                      <div className="w-3 h-3 bg-emerald-600/40 mr-2" />
-                      95% Confidence
-                    </Badge>
-                  </div>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <AreaChart data={(() => {
-                      const rawTrainingData = segment.raw_training_data || [];
-                      const rawTestData = segment.raw_test_data || [];
-                      const rawForecastData = segment.raw_forecast_data || [];
-                      const allData = [...rawTrainingData, ...rawTestData, ...rawForecastData];
-                      
-                      return allData.map((point, idx) => {
-                        const testStartIdx = rawTrainingData.length;
-                        const testEndIdx = testStartIdx + rawTestData.length;
-                        const forecastStartIdx = testEndIdx;
-                        
-                        let fitted = null;
-                        let forecast = null;
-                        
-                        if (idx >= testStartIdx && idx < testEndIdx) {
-                          fitted = point.predicted;
-                        } else if (idx >= forecastStartIdx) {
-                          forecast = point.predicted;
-                        }
-                        
-                        return {
-                          date: point.date,
-                          actual: isValidNumber(point.actual) ? point.actual : null,
-                          fitted: isValidNumber(fitted) ? fitted : null,
-                          forecast: isValidNumber(forecast) ? forecast : null,
-                          lower_bound: isValidNumber(point.lower_bound) ? point.lower_bound : null,
-                          upper_bound: isValidNumber(point.upper_bound) ? point.upper_bound : null,
-                        };
-                      });
-                    })()}>
-                      <defs>
-                        <linearGradient id={`confidenceGradient-raw-${segment.segment}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="rgb(239, 68, 68)" stopOpacity={0.3} />
-                          <stop offset="100%" stopColor="rgb(239, 68, 68)" stopOpacity={0.05} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis 
-                        dataKey="date" 
-                        className="text-xs"
-                        tickFormatter={(value) => new Date(value).toLocaleDateString()}
-                      />
-                      <YAxis className="text-xs" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(var(--popover))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '0.5rem',
-                        }}
-                        labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                        formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
-                      />
-                      <Legend />
-                      
-                      <Area
-                        type="monotone"
-                        dataKey="upper_bound"
-                        stroke="rgb(239, 68, 68)"
-                        strokeWidth={1}
-                        strokeOpacity={0.3}
-                        fill={`url(#confidenceGradient-raw-${segment.segment})`}
-                        name={getConfidenceLabels(segment).upper}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="lower_bound"
-                        stroke="rgb(239, 68, 68)"
-                        strokeWidth={1}
-                        strokeOpacity={0.3}
-                        fill={`url(#confidenceGradient-raw-${segment.segment})`}
-                        name={getConfidenceLabels(segment).lower}
-                      />
-                      
-                      <Line
-                        type="monotone"
-                        dataKey="actual"
-                        stroke="rgb(37, 99, 235)"
-                        strokeWidth={2.5}
-                        dot={false}
-                        name="Actual Data"
-                        connectNulls={true}
-                      />
-                      
-                      <Line
-                        type="monotone"
-                        dataKey="fitted"
-                        stroke="rgb(249, 115, 22)"
-                        strokeWidth={2.5}
-                        strokeDasharray="5 5"
-                        dot={{ fill: 'rgb(249, 115, 22)', r: 3 }}
-                        name="Fitted (Test)"
-                        connectNulls={true}
-                      />
-                      
-                      <Line
-                        type="monotone"
-                        dataKey="forecast"
-                        stroke="rgb(147, 51, 234)"
-                        strokeWidth={2.5}
-                        strokeDasharray="8 4"
-                        dot={{ fill: 'rgb(147, 51, 234)', r: 3 }}
-                        name="Forecast"
-                        connectNulls={true}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Results Table */}
-            <ResultsTable
-              segment={segment.segment}
-              trainingData={segment.training_data}
-              testData={segment.test_data}
-              forecastData={segment.forecast_data}
-              primaryModel={segment.model || results.model}
-              benchmarkModel={segment.benchmark_model}
-              benchmarkTrainingData={segment.benchmark_training_data}
-              benchmarkTestData={segment.benchmark_test_data}
-              benchmarkForecastData={segment.benchmark_forecast_data}
-              rawTrainingData={segment.raw_training_data}
-              rawTestData={segment.raw_test_data}
-              rawForecastData={segment.raw_forecast_data}
-            />
           </TabsContent>
-        ))}
-      </Tabs>
-    </div>
+
+          {/* Metrics Tab */}
+          <TabsContent value="metrics" className="mt-4">
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Metric</TableHead>
+                    <TableHead className="text-right">Training Set</TableHead>
+                    <TableHead className="text-right">Test Set</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {currentSegmentResult.metrics.map((m) => {
+                    const isRSquared = m.metric === "r_squared" || m.metric === "adjusted_r_squared";
+                    const trainIsNegative = isRSquared && m.trainValue < 0;
+                    const testIsNegative = isRSquared && m.testValue < 0;
+
+                    return (
+                      <TableRow key={m.metric}>
+                        <TableCell className="font-medium">
+                          {metricNames[m.metric]}
+                          <Badge variant="outline" className="ml-2 text-xs">
+                            {m.metric.toUpperCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className={`text-right font-mono ${trainIsNegative ? "text-red-500" : ""}`}>
+                          {formatNumber(m.trainValue, 4)}
+                          {trainIsNegative && <span className="ml-1 text-xs">(poor fit)</span>}
+                        </TableCell>
+                        <TableCell className={`text-right font-mono ${testIsNegative ? "text-red-500" : ""}`}>
+                          {formatNumber(m.testValue, 4)}
+                          {testIsNegative && <span className="ml-1 text-xs">(poor fit)</span>}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            {currentSegmentResult.aiCommentary && (
+              <div className="mt-4 p-4 bg-muted rounded-lg">
+                <h4 className="font-medium mb-2">AI Analysis</h4>
+                <p className="text-sm text-muted-foreground">{currentSegmentResult.aiCommentary}</p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Data Tab */}
+          <TabsContent value="data" className="mt-4">
+            <div className="max-h-[400px] overflow-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Actual</TableHead>
+                    <TableHead className="text-right">Predicted</TableHead>
+                    <TableHead className="text-right">Lower</TableHead>
+                    <TableHead className="text-right">Upper</TableHead>
+                    <TableHead className="text-center">Type</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {currentSegmentResult.forecastData.map((point, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell>{formatDate(point.date)}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatNumber(point.actual)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatNumber(point.predicted)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-muted-foreground">
+                        {formatNumber(point.lowerBound)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-muted-foreground">
+                        {formatNumber(point.upperBound)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {point.isForecast ? (
+                          <Badge>Forecast</Badge>
+                        ) : point.isTestSet ? (
+                          <Badge variant="secondary">Test</Badge>
+                        ) : (
+                          <Badge variant="outline">Train</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
   );
 };
+
+export default ForecastResults;

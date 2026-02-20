@@ -1,211 +1,170 @@
-import { useCallback, useState } from "react";
+import React, { useCallback, useState } from "react";
+import Papa from "papaparse";
+import { Upload, FileSpreadsheet, X, CheckCircle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Upload, FileSpreadsheet, CheckCircle2, X, Download } from "lucide-react";
-import Papa from "papaparse";
-import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface DataUploadProps {
-  onDataLoaded: (data: any[], headers: string[]) => void;
-  onClear: () => void;
-  hasData: boolean;
-  csvData?: any[];
-  availableColumns?: string[];
+  onDataLoaded: (data: Record<string, unknown>[], columns: string[]) => void;
+  isLoaded: boolean;
+  fileName?: string;
+  onClear?: () => void;
 }
 
-export const DataUpload = ({ onDataLoaded, onClear, hasData, csvData = [], availableColumns = [] }: DataUploadProps) => {
-  const [fileName, setFileName] = useState<string>("");
-  const [rowCount, setRowCount] = useState<number>(0);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+const DataUpload: React.FC<DataUploadProps> = ({
+  onDataLoaded,
+  isLoaded,
+  fileName,
+  onClear,
+}) => {
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleDownload = () => {
-    if (csvData.length === 0 || availableColumns.length === 0) {
-      toast.error("No data available to download");
-      return;
-    }
+  const processFile = useCallback(
+    (file: File) => {
+      setIsLoading(true);
+      setError(null);
 
-    try {
-      // Convert data to CSV format using Papa Parse
-      const csv = Papa.unparse({
-        fields: availableColumns,
-        data: csvData
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          setIsLoading(false);
+          if (results.errors.length > 0) {
+            setError(`Parse error: ${results.errors[0].message}`);
+            return;
+          }
+          const data = results.data as Record<string, unknown>[];
+          const columns = results.meta.fields || [];
+          if (data.length === 0) {
+            setError("The file appears to be empty");
+            return;
+          }
+          onDataLoaded(data, columns);
+        },
+        error: (err) => {
+          setIsLoading(false);
+          setError(`Failed to parse file: ${err.message}`);
+        },
       });
+    },
+    [onDataLoaded]
+  );
 
-      // Create blob and download
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName || 'data_export.csv';
-      link.click();
-      URL.revokeObjectURL(url);
-      
-      toast.success("CSV file downloaded successfully");
-    } catch (error) {
-      console.error("Error downloading CSV:", error);
-      toast.error("Failed to download CSV file");
-    }
-  };
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const file = e.dataTransfer.files[0];
+      if (file && file.name.endsWith(".csv")) {
+        processFile(file);
+      } else {
+        setError("Please upload a CSV file");
+      }
+    },
+    [processFile]
+  );
 
-  const processFile = useCallback((file: File) => {
-    if (!file.name.endsWith('.csv')) {
-      toast.error("Please upload a CSV file");
-      return;
-    }
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        processFile(file);
+      }
+    },
+    [processFile]
+  );
 
-    setIsProcessing(true);
-    setFileName(file.name);
-
-    Papa.parse(file, {
-      header: true,
-      dynamicTyping: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        if (results.errors.length > 0) {
-          toast.error("Error parsing CSV file");
-          console.error(results.errors);
-          setIsProcessing(false);
-          return;
-        }
-
-        const headers = results.meta.fields || [];
-        const data = results.data;
-
-        if (headers.length === 0 || data.length === 0) {
-          toast.error("CSV file is empty or invalid");
-          setIsProcessing(false);
-          return;
-        }
-
-        setRowCount(data.length);
-        onDataLoaded(data, headers);
-        toast.success(`Successfully loaded ${data.length} rows with ${headers.length} columns`);
-        setIsProcessing(false);
-      },
-      error: (error) => {
-        toast.error(`Error reading file: ${error.message}`);
-        setIsProcessing(false);
-      },
-    });
-  }, [onDataLoaded]);
-
-  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    processFile(file);
-    // Reset the input
-    event.target.value = '';
-  }, [processFile]);
-
-  const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDragging(true);
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(true);
   }, []);
 
-  const handleDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDragging(false);
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
   }, []);
 
-  const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDragging(false);
-
-    const file = event.dataTransfer.files?.[0];
-    if (file) {
-      processFile(file);
-    }
-  }, [processFile]);
-
-  const handleClear = () => {
-    setFileName("");
-    setRowCount(0);
-    onClear();
-    toast.info("Data cleared");
-  };
+  if (isLoaded && fileName) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-green-500" />
+            Data Loaded
+          </CardTitle>
+          <CardDescription>Your CSV file has been successfully loaded</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+            <div className="flex items-center gap-3">
+              <FileSpreadsheet className="h-8 w-8 text-primary" />
+              <div>
+                <p className="font-medium">{fileName}</p>
+                <p className="text-sm text-muted-foreground">Ready for configuration</p>
+              </div>
+            </div>
+            {onClear && (
+              <Button variant="outline" size="sm" onClick={onClear}>
+                <X className="h-4 w-4 mr-1" />
+                Clear
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileSpreadsheet className="h-5 w-5 text-primary" />
-          Data Upload
-        </CardTitle>
-        <CardDescription>Upload your time series data in CSV format</CardDescription>
+        <CardTitle>Upload Your Data</CardTitle>
+        <CardDescription>
+          Upload a CSV file containing your time series data. The file should include a date column
+          and at least one numeric column for forecasting.
+        </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {!hasData ? (
-          <div 
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
-              isDragging 
-                ? 'border-primary bg-primary/5 scale-[1.02]' 
-                : 'border-border hover:border-primary/50'
-            }`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <Upload className={`h-12 w-12 mx-auto mb-4 transition-colors ${
-              isDragging ? 'text-primary' : 'text-muted-foreground'
-            }`} />
-            <Label htmlFor="csv-upload" className="cursor-pointer">
-              <div className="text-sm mb-2">
-                <span className="text-primary font-semibold">Click to upload</span> or drag and drop
-              </div>
-              <div className="text-xs text-muted-foreground">CSV files only</div>
-            </Label>
-            <input
-              id="csv-upload"
-              type="file"
-              accept=".csv"
-              onChange={handleFileUpload}
-              className="hidden"
-              disabled={isProcessing}
-            />
-            {isProcessing && (
-              <div className="mt-4 text-sm text-muted-foreground">Processing file...</div>
-            )}
-          </div>
-        ) : (
-          <div className="border border-border rounded-lg p-4 bg-accent/5">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
-                <div>
-                  <div className="font-medium">{fileName}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {rowCount.toLocaleString()} rows loaded
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={handleDownload}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download CSV
-                </Button>
-                <Button variant="ghost" size="sm" onClick={handleClear}>
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+      <CardContent>
+        <div
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          className={cn(
+            "border-2 border-dashed rounded-lg p-12 text-center transition-colors cursor-pointer",
+            isDragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50",
+            isLoading && "opacity-50 pointer-events-none"
+          )}
+        >
+          <input
+            type="file"
+            accept=".csv"
+            onChange={handleFileSelect}
+            className="hidden"
+            id="csv-upload"
+            disabled={isLoading}
+          />
+          <label htmlFor="csv-upload" className="cursor-pointer">
+            <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <p className="text-lg font-medium mb-2">
+              {isLoading ? "Processing..." : "Drop your CSV file here"}
+            </p>
+            <p className="text-sm text-muted-foreground mb-4">or click to browse</p>
+            <Button variant="outline" disabled={isLoading} asChild>
+              <span>Select File</span>
+            </Button>
+          </label>
+        </div>
+        {error && (
+          <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+            <p className="text-sm text-destructive">{error}</p>
           </div>
         )}
-
-        <div className="text-xs text-muted-foreground space-y-1">
-          <p>📋 Your CSV should contain:</p>
-          <ul className="list-disc list-inside ml-2 space-y-1">
-            <li>A date/timestamp column</li>
-            <li>One or more dependent variable columns (segments)</li>
-            <li>Optional: regressor/covariate columns</li>
-          </ul>
-        </div>
       </CardContent>
     </Card>
   );
 };
+
+export default DataUpload;

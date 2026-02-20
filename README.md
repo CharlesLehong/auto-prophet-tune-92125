@@ -1,73 +1,81 @@
-# Welcome to your Lovable project
+# Prophet-Tune
 
-## Project info
+A professional time series forecasting platform built with React, TypeScript, and Vite.
 
-**URL**: https://lovable.dev/projects/ed62032f-0139-413e-8b97-f33f96b112c0
+## Features
 
-## How can I edit this code?
+- **CSV Data Upload** - Drag-and-drop file upload with automatic column detection
+- **Multi-Segment Forecasting** - Handle different time series segments independently
+- **Multiple Models** - Prophet, AutoGluon, ARIMA support
+- **Hyperparameter Tuning** - Advanced Prophet configuration
+- **Performance Metrics** - MAE, RMSE, MAPE, R-squared, and more
+- **Export Results** - Download forecasts in various formats
 
-There are several ways of editing your application.
+## 9-Step Workflow
 
-**Use Lovable**
+1. **Upload** - Upload your time series CSV data
+2. **Model** - Select forecasting model (Prophet/AutoGluon)
+3. **Variables** - Configure date, segment, and target columns
+4. **Segments** - Set up train/test splits and forecast periods
+5. **Analysis** - AI-powered data analysis (coming soon)
+6. **Regressors** - Configure external variables
+7. **Metrics** - Select performance metrics to calculate
+8. **Parameters** - Fine-tune model hyperparameters
+9. **Results** - View forecasts, metrics, and export
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/ed62032f-0139-413e-8b97-f33f96b112c0) and start prompting.
+## Tech Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Frontend**: React 18, TypeScript, Vite
+- **Styling**: Tailwind CSS, shadcn-ui
+- **Charts**: Recharts
+- **Routing**: React Router 6
+- **State**: TanStack React Query
+- **Backend**: Supabase (Auth, Database, Edge Functions)
 
-**Use your preferred IDE**
+## Getting Started
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+```bash
+# Install dependencies
+npm install
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
+
+# Build for production
+npm run build
 ```
 
-**Edit a file directly in GitHub**
+The app will be available at `http://localhost:5173`
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Environment Variables
 
-**Use GitHub Codespaces**
+Create a `.env` file:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```env
+VITE_SUPABASE_URL=your-supabase-url
+VITE_SUPABASE_PUBLISHABLE_KEY=your-anon-key
+```
 
-## What technologies are used for this project?
+## Project Structure
 
-This project is built with:
+```
+src/
+├── pages/           # Route pages
+├── components/
+│   ├── ui/          # shadcn-ui components
+│   └── forecast/    # Forecast-specific components
+├── types/           # TypeScript definitions
+├── utils/           # Utility functions
+├── hooks/           # Custom React hooks
+└── integrations/    # External service clients
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Claude Code Integration
 
-## How can I deploy this project?
+This project includes Claude Code configuration:
+- `CLAUDE.md` - Project documentation
+- `.claude/commands/` - Custom slash commands
 
-Simply open [Lovable](https://lovable.dev/projects/ed62032f-0139-413e-8b97-f33f96b112c0) and click on Share -> Publish.
+## License
 
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Private project - All rights reserved.

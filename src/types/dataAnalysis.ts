@@ -1,52 +1,65 @@
+// Data analysis and transformation types
+
+// Stationarity test results
 export interface StationarityTestResult {
-  test_statistic: number;
-  p_value: number;
-  critical_values: Record<string, number>;
-  is_stationary: boolean;
+  testStatistic: number;
+  pValue: number;
+  criticalValues: Record<string, number>;
+  isStationary: boolean;
   recommendation: string;
 }
 
-export interface ACFResult {
-  lags: number[];
-  correlations: number[];
-  confidence_interval: number;
+// Autocorrelation results
+export interface AutocorrelationResult {
+  lag: number;
+  acf: number;
+  pacf: number;
+  significanceBound: number;
 }
 
-export interface PACFResult {
-  lags: number[];
-  correlations: number[];
-  confidence_interval: number;
-}
-
-export interface DataTransformation {
-  type: 'log' | 'difference' | 'seasonal_difference' | 'box_cox' | 'none';
-  variable?: string;
+// Transformation recommendation
+export interface TransformationRecommendation {
+  type: "log" | "difference" | "seasonal_difference" | "sqrt" | "box_cox" | "standardize" | "none";
+  reason: string;
+  priority: number;
   parameters?: {
-    seasonal_period?: number;
+    order?: number;
+    seasonalPeriod?: number;
     lambda?: number;
   };
-  applied: boolean;
 }
 
-export interface TransformationChain {
-  transformations: DataTransformation[];
-  stationarityBeforeTests: StationarityTestResult[];
-  stationarityAfterTest?: StationarityTestResult;
+// Data characteristics
+export interface DataCharacteristics {
+  hasTrend: boolean;
+  hasSeasonality: boolean;
+  seasonalPeriod?: number;
+  hasVarianceInstability: boolean;
+  hasOutliers: boolean;
+  outlierCount: number;
+  missingValueCount: number;
+  dateRange: {
+    start: string;
+    end: string;
+  };
+  recordCount: number;
 }
 
-export interface TransformationInfo {
-  name: string;
-  description: string;
-  useCase: string;
-  example: string;
+// Complete analysis result for a segment
+export interface SegmentAnalysisResult {
+  segmentName: string;
+  characteristics: DataCharacteristics;
+  stationarityTest: StationarityTestResult;
+  autocorrelation: AutocorrelationResult[];
+  recommendations: TransformationRecommendation[];
+  transformedStationarityTest?: StationarityTestResult;
 }
 
-export interface DataAnalysisResults {
-  stationarity_test?: StationarityTestResult;
-  acf?: ACFResult;
-  pacf?: PACFResult;
-  transformations: DataTransformation[];
-  ai_insights?: string;
-  recommended_model?: 'prophet' | 'autogluon' | 'arima' | 'ar' | 'arma';
-  model_rationale?: string;
+// Analysis state for UI
+export interface AnalysisState {
+  isLoading: boolean;
+  isComplete: boolean;
+  error?: string;
+  result?: SegmentAnalysisResult;
+  selectedTransformations: TransformationRecommendation[];
 }

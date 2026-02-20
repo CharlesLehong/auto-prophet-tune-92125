@@ -1,94 +1,250 @@
-import { useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
+import { Target, Calendar, TrendingUp, Plus, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { Plus, X, Target, Calendar, TrendingUp } from "lucide-react";
-import type { SegmentConfig } from "@/types/forecast";
-import { analyzeSegmentData, getFrequencyName, calculateMonthsObservable } from "@/utils/dataAnalysis";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { SegmentConfig, DataFrequency } from "@/types/forecast";
+import { frequencyNames } from "@/types/forecast";
 
 interface SegmentMapperProps {
-  availableSegmentValues: string[];
+  data: Record<string, unknown>[];
+  dateColumn: string;
+  segmentColumn: string;
   segments: SegmentConfig[];
   onSegmentsChange: (segments: SegmentConfig[]) => void;
-  csvData: any[];
-  segmentColumn: string;
-  dateColumn: string;
 }
 
-export const SegmentMapper = ({ 
-  availableSegmentValues, 
-  segments, 
-  onSegmentsChange,
-  csvData,
+const SegmentMapper: React.FC<SegmentMapperProps> = ({
+  data,
+  dateColumn,
   segmentColumn,
-  dateColumn 
-}: SegmentMapperProps) => {
-  const [selectedSegmentValue, setSelectedSegmentValue] = useState("");
-  const [segmentAnalysis, setSegmentAnalysis] = useState<Map<string, any>>(new Map());
+  segments,
+  onSegmentsChange,
+}) => {
+  const [selectedSegmentValue, setSelectedSegmentValue] = useState<string>("");
 
-  // Analyze data when segments or data changes
-  useEffect(() => {
-    const analysis = new Map();
-    segments.forEach(segment => {
-      const result = analyzeSegmentData(csvData, segmentColumn, segment.segmentValue, dateColumn);
-      analysis.set(segment.segmentValue, result);
+  // Extract unique segments from data
+  const uniqueSegmentValues = useMemo(() => {
+    if (!segmentColumn) return [];
+    const segmentSet = new Set<string>();
+    data.forEach((row) => {
+      const value = row[segmentColumn];
+      if (value !== null && value !== undefined && String(value).trim() !== "") {
+        segmentSet.add(String(value));
+      }
     });
-    setSegmentAnalysis(analysis);
-  }, [segments, csvData, segmentColumn, dateColumn]);
+    return Array.from(segmentSet).sort();
+  }, [data, segmentColumn]);
 
-  const addSegment = () => {
-    if (selectedSegmentValue && !segments.find((s) => s.segmentValue === selectedSegmentValue)) {
-      const analysis = analyzeSegmentData(csvData, segmentColumn, selectedSegmentValue, dateColumn);
-      const defaultTraining = Math.max(1, Math.floor(analysis.totalRecords * 0.9)); // Default 90% for training
-      
-      onSegmentsChange([
-        ...segments,
-        {
-          segment: selectedSegmentValue,
-          segmentValue: selectedSegmentValue,
-          regressors: [],
-          forecast_periods: 24,
-          frequency: analysis.detectedFrequency,
-          total_records: analysis.totalRecords,
-          training_records: defaultTraining,
-          test_records: analysis.totalRecords - defaultTraining,
-          // Initialize with default Prophet parameters
-          prophet_params: {
-            growth: 'linear',
-            changepoint_prior_scale: 0.05,
-            seasonality_mode: 'additive',
-            seasonality_prior_scale: 10,
-            yearly_seasonality: true,
-            weekly_seasonality: false,
-            daily_seasonality: false,
-            changepoint_range: 0.8,
-            cv_initial: 730,
-            cv_period: 180,
-            cv_horizon: 365,
-            custom_seasonalities: [],
-            interval_width: 0.80,
-            lower_bound: undefined,
-            upper_bound: undefined,
-          },
-        },
-      ]);
-      setSelectedSegmentValue("");
+  // Calculate record counts and date ranges per segment
+  const segmentAnalysis = useMemo(() => {
+    const analysis: Record<string, { count: number; firstDate: string; lastDate: string }> = {};
+
+    if (!segmentColumn) {
+      const dates = data
+        .map((row) => row[dateColumn])
+        .filter((d) => d)
+        .map((d) => new Date(String(d)))
+        .filter((d) => !isNaN(d.getTime()))
+        .sort((a, b) => a.getTime() - b.getTime());
+
+      analysis["All Data"] = {
+        count: data.length,
+        firstDate: dates[0]?.toLocaleDateString() || "N/A",
+        lastDate: dates[dates.length - 1]?.toLocaleDateString() || "N/A",
+      };
+      return analysis;
     }
-  };
 
-  const removeSegment = (segmentName: string) => {
-    onSegmentsChange(segments.filter((s) => s.segment !== segmentName));
+    // Count records per segment
+    uniqueSegmentValues.forEach((seg) => {
+      const segmentData = data.filter((row) => String(row[segmentColumn]) === seg);
+      const dates = segmentData
+        .map((row) => row[dateColumn])
+        .filter((d) => d)
+        .map((d) => new Date(String(d)))
+        .filter((d) => !isNaN(d.getTime()))
+        .sort((a, b) => a.getTime() - b.getTime());
+
+      analysis[seg] = {
+        count: segmentData.length,
+        firstDate: dates[0]?.toLocaleDateString() || "N/A",
+        lastDate: dates[dates.length - 1]?.toLocaleDateString() || "N/A",
+      };
+    });
+
+    return analysis;
+  }, [data, segmentColumn, dateColumn, uniqueSegmentValues]);
+
+  // Auto-initialize "All Data" when no segment column selected
+  React.useEffect(() => {
+    if (!segmentColumn && segments.length === 0 && data.length > 0) {
+      const totalRecords = data.length;
+      const testRecords = Math.max(1, Math.floor(totalRecords * 0.1));
+      const trainRecords = totalRecords - testRecords;
+      onSegmentsChange([{
+        segmentName: "All Data",
+        trainRecords,
+        testRecords,
+        forecastPeriods: 24,
+        frequency: "MS" as DataFrequency,
+        regressors: [],
+      }]);
+    }
+  }, [segmentColumn, segments.length, data.length, onSegmentsChange]);
+
+  // Get segments that haven't been added yet
+  const availableSegments = useMemo(() => {
+    const addedNames = new Set(segments.map((s) => s.segmentName));
+    return uniqueSegmentValues.filter((seg) => !addedNames.has(seg));
+  }, [uniqueSegmentValues, segments]);
+
+  // Add selected segment
+  const addSegment = () => {
+    if (!selectedSegmentValue) return;
+
+    const analysis = segmentAnalysis[selectedSegmentValue];
+    const totalRecords = analysis?.count || 0;
+    const testRecords = Math.max(1, Math.floor(totalRecords * 0.1));
+    const trainRecords = totalRecords - testRecords;
+
+    onSegmentsChange([...segments, {
+      segmentName: selectedSegmentValue,
+      trainRecords,
+      testRecords,
+      forecastPeriods: 24,
+      frequency: "MS" as DataFrequency,
+      regressors: [],
+    }]);
+    setSelectedSegmentValue("");
   };
 
   const updateSegment = (segmentName: string, updates: Partial<SegmentConfig>) => {
     onSegmentsChange(
-      segments.map((s) => (s.segment === segmentName ? { ...s, ...updates } : s))
+      segments.map((s) => (s.segmentName === segmentName ? { ...s, ...updates } : s))
     );
   };
+
+  const removeSegment = (segmentName: string) => {
+    onSegmentsChange(segments.filter((s) => s.segmentName !== segmentName));
+  };
+
+  // If no segment column is selected, show simplified view
+  if (!segmentColumn) {
+    const segment = segments[0];
+    if (!segment) return null;
+
+    const analysis = segmentAnalysis["All Data"];
+    const totalRecords = analysis?.count || 0;
+    const trainPercent = totalRecords > 0 ? Math.round((segment.trainRecords / totalRecords) * 100) : 0;
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-5 w-5 text-primary" />
+            Forecast Configuration
+          </CardTitle>
+          <CardDescription>
+            Configure forecast settings for your data (no segmentation selected)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <Card className="border-2">
+            <CardContent className="p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Badge variant="default" className="text-sm px-3 py-1">All Data</Badge>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 p-3 bg-muted/50 rounded-lg">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Total Records</div>
+                  <div className="text-lg font-semibold">{totalRecords}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    Date Range
+                  </div>
+                  <div className="text-xs font-medium">
+                    {analysis?.firstDate} - {analysis?.lastDate}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3" />
+                    Frequency
+                  </div>
+                  <Select
+                    value={segment.frequency}
+                    onValueChange={(value) => updateSegment(segment.segmentName, { frequency: value as DataFrequency })}
+                  >
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(frequencyNames).map(([value, name]) => (
+                        <SelectItem key={value} value={value} className="text-xs">{name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <Label className="text-sm">
+                    Training Records: <span className="font-semibold">{segment.trainRecords}</span>
+                  </Label>
+                  <span className="text-xs text-muted-foreground">({trainPercent}% of data)</span>
+                </div>
+                <Slider
+                  value={[segment.trainRecords]}
+                  onValueChange={([v]) => updateSegment(segment.segmentName, {
+                    trainRecords: v,
+                    testRecords: totalRecords - v,
+                  })}
+                  min={1}
+                  max={Math.max(1, totalRecords - 1)}
+                  step={1}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Training: {segment.trainRecords}</span>
+                  <span>Testing: {segment.testRecords}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <Label className="text-sm whitespace-nowrap">Forecast Periods:</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={segment.forecastPeriods}
+                  onChange={(e) => updateSegment(segment.segmentName, { forecastPeriods: parseInt(e.target.value) || 1 })}
+                  className="w-24"
+                />
+                <span className="text-xs text-muted-foreground">
+                  {frequencyNames[segment.frequency]} periods ahead
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -98,59 +254,88 @@ export const SegmentMapper = ({
           Segment Selection & Configuration
         </CardTitle>
         <CardDescription>
-          Select which segments to include and configure their forecast settings
+          Select segments from the dropdown and configure their forecast settings
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Segment Selection Dropdown */}
         <div className="flex gap-2">
           <Select value={selectedSegmentValue} onValueChange={setSelectedSegmentValue}>
             <SelectTrigger className="flex-1">
-              <SelectValue placeholder="Select segment to add" />
+              <SelectValue placeholder="Select a segment to add..." />
             </SelectTrigger>
-            <SelectContent className="bg-popover max-h-60">
-              {availableSegmentValues
-                .filter((val) => val !== "" && !segments.find((s) => s.segmentValue === val))
-                .map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {value}
-                  </SelectItem>
-                ))}
+            <SelectContent>
+              <ScrollArea className="h-60">
+                {availableSegments.length === 0 ? (
+                  <div className="p-2 text-sm text-muted-foreground text-center">
+                    All segments have been added
+                  </div>
+                ) : (
+                  availableSegments.map((segValue) => {
+                    const analysis = segmentAnalysis[segValue];
+                    return (
+                      <SelectItem key={segValue} value={segValue}>
+                        <div className="flex items-center justify-between w-full gap-4">
+                          <span>{segValue}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({analysis?.count || 0} records)
+                          </span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })
+                )}
+              </ScrollArea>
             </SelectContent>
           </Select>
           <Button onClick={addSegment} disabled={!selectedSegmentValue}>
             <Plus className="h-4 w-4 mr-2" />
-            Add Segment
+            Add
           </Button>
         </div>
 
-        {segments.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            No segments configured. Add at least one segment to continue.
+        {/* Summary */}
+        <div className="p-3 bg-muted/50 rounded-lg">
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-sm font-medium">{uniqueSegmentValues.length} segments available</p>
+              <p className="text-xs text-muted-foreground">{segments.length} selected for forecasting</p>
+            </div>
+            {segments.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => onSegmentsChange([])}>
+                Clear All
+              </Button>
+            )}
           </div>
-        ) : (
+        </div>
+
+        {/* Selected Segments Configuration */}
+        {segments.length > 0 ? (
           <div className="space-y-4">
+            <Label className="text-sm font-medium">Configure Selected Segments</Label>
             {segments.map((segment) => {
-              const analysis = segmentAnalysis.get(segment.segmentValue);
-              const monthsObservable = analysis 
-                ? calculateMonthsObservable(analysis.firstDate, analysis.lastDate, segment.frequency)
-                : 0;
+              const analysis = segmentAnalysis[segment.segmentName];
+              const totalRecords = analysis?.count || 0;
+              const trainPercent = totalRecords > 0 ? Math.round((segment.trainRecords / totalRecords) * 100) : 0;
 
               return (
-                <Card key={segment.segment} className="p-4">
-                  <div className="space-y-4">
+                <Card key={segment.segmentName} className="border-2">
+                  <CardContent className="p-4 space-y-4">
+                    {/* Header */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Badge variant="default" className="text-sm">
-                          {segment.segment}
+                        <Badge variant="default" className="text-sm px-3 py-1">
+                          {segment.segmentName}
                         </Badge>
                         <span className="text-xs text-muted-foreground">
-                          {segment.regressors.length} regressors
+                          {segment.regressors?.length || 0} regressors
                         </span>
                       </div>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => removeSegment(segment.segment)}
+                        onClick={() => removeSegment(segment.segmentName)}
+                        className="h-8 w-8 p-0"
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -160,126 +345,105 @@ export const SegmentMapper = ({
                     <div className="grid grid-cols-3 gap-4 p-3 bg-muted/50 rounded-lg">
                       <div>
                         <div className="text-xs text-muted-foreground mb-1">Total Records</div>
-                        <div className="text-lg font-semibold">{segment.total_records}</div>
+                        <div className="text-lg font-semibold">{totalRecords}</div>
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          Months Observable
+                          Date Range
                         </div>
-                        <div className="text-lg font-semibold">{monthsObservable}</div>
+                        <div className="text-xs font-medium">
+                          {analysis?.firstDate} - {analysis?.lastDate}
+                        </div>
                       </div>
                       <div>
-                        <div className="text-xs text-muted-foreground mb-1">Frequency</div>
-                        <div className="text-sm font-medium">{getFrequencyName(segment.frequency)}</div>
-                      </div>
-                    </div>
-
-                    {/* Date Range */}
-                    {analysis && (
-                      <div className="text-xs text-muted-foreground">
-                        Data from {analysis.firstDate?.toLocaleDateString()} to {analysis.lastDate?.toLocaleDateString()}
-                      </div>
-                    )}
-
-                    {/* Training/Testing Split */}
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <Label className="text-sm">Training Records: {segment.training_records}</Label>
-                          <span className="text-xs text-muted-foreground">
-                            ({Math.round((segment.training_records / segment.total_records) * 100)}% of data)
-                          </span>
+                        <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                          <TrendingUp className="h-3 w-3" />
+                          Frequency
                         </div>
-                        <Slider
-                          value={[segment.training_records]}
-                          onValueChange={([v]) =>
-                            updateSegment(segment.segment, {
-                              training_records: v,
-                              test_records: segment.total_records - v,
-                            })
-                          }
-                          min={1}
-                          max={segment.total_records}
-                          step={1}
-                          className="py-2"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>1</span>
-                          <span>{segment.total_records}</span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-xs flex items-center gap-1">
-                            <TrendingUp className="h-3 w-3" />
-                            Test Records (Holdout)
-                          </Label>
-                          <Input
-                            type="number"
-                            value={segment.test_records}
-                            onChange={(e) => {
-                              const testRecords = parseInt(e.target.value) || 0;
-                              updateSegment(segment.segment, {
-                                test_records: Math.min(testRecords, segment.total_records - 1),
-                                training_records: segment.total_records - Math.min(testRecords, segment.total_records - 1),
-                              });
-                            }}
-                            min={0}
-                            max={segment.total_records - 1}
-                          />
-                          <div className="text-xs text-muted-foreground">
-                            Last {segment.test_records} records for validation
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-xs">Forecast Periods</Label>
-                          <Input
-                            type="number"
-                            value={segment.forecast_periods}
-                            onChange={(e) =>
-                              updateSegment(segment.segment, {
-                                forecast_periods: parseInt(e.target.value) || 12,
-                              })
-                            }
-                            min={1}
-                          />
-                          <div className="text-xs text-muted-foreground">
-                            Forecast {segment.forecast_periods} {getFrequencyName(segment.frequency).toLowerCase()} periods
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Frequency Override */}
-                      <div className="space-y-2">
-                        <Label className="text-xs">Override Frequency (Optional)</Label>
                         <Select
                           value={segment.frequency}
-                          onValueChange={(v) => updateSegment(segment.segment, { frequency: v })}
+                          onValueChange={(value) =>
+                            updateSegment(segment.segmentName, { frequency: value as DataFrequency })
+                          }
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="h-7 text-xs">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent className="bg-popover">
-                            <SelectItem value="D">Daily</SelectItem>
-                            <SelectItem value="W">Weekly</SelectItem>
-                            <SelectItem value="SMS">Semi-Monthly</SelectItem>
-                            <SelectItem value="MS">Monthly</SelectItem>
-                            <SelectItem value="QS">Quarterly</SelectItem>
-                            <SelectItem value="YS">Yearly</SelectItem>
+                          <SelectContent>
+                            {Object.entries(frequencyNames).map(([value, name]) => (
+                              <SelectItem key={value} value={value} className="text-xs">
+                                {name}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
-                  </div>
+
+                    {/* Training/Testing Split Slider */}
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <Label className="text-sm">
+                          Training Records: <span className="font-semibold">{segment.trainRecords}</span>
+                        </Label>
+                        <span className="text-xs text-muted-foreground">
+                          ({trainPercent}% of data)
+                        </span>
+                      </div>
+                      <Slider
+                        value={[segment.trainRecords]}
+                        onValueChange={([v]) =>
+                          updateSegment(segment.segmentName, {
+                            trainRecords: v,
+                            testRecords: totalRecords - v,
+                          })
+                        }
+                        min={1}
+                        max={Math.max(1, totalRecords - 1)}
+                        step={1}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Training: {segment.trainRecords}</span>
+                        <span>Testing: {segment.testRecords}</span>
+                      </div>
+                    </div>
+
+                    {/* Forecast Periods */}
+                    <div className="flex items-center gap-4">
+                      <Label className="text-sm whitespace-nowrap">Forecast Periods:</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={365}
+                        value={segment.forecastPeriods}
+                        onChange={(e) =>
+                          updateSegment(segment.segmentName, {
+                            forecastPeriods: parseInt(e.target.value) || 1,
+                          })
+                        }
+                        className="w-24"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {frequencyNames[segment.frequency]} periods ahead
+                      </span>
+                    </div>
+                  </CardContent>
                 </Card>
               );
             })}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+            <Target className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p>No segments selected.</p>
+            <p className="text-sm">Select a segment from the dropdown above to configure forecast settings.</p>
           </div>
         )}
       </CardContent>
     </Card>
   );
 };
+
+export default SegmentMapper;

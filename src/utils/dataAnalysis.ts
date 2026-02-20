@@ -1,263 +1,189 @@
-/**
- * Check if a column contains numeric data
- */
-export const isNumericColumn = (data: any[], columnName: string): boolean => {
-  if (!data || data.length === 0) return false;
-  
-  // Sample first 50 rows for performance
-  const sample = data.slice(0, 50);
-  const numericCount = sample.filter(row => {
-    const value = row[columnName];
-    if (value === null || value === undefined || value === '') return false;
-    
-    // Remove common non-numeric characters like %, $, commas
-    const cleanValue = String(value).replace(/[$,%,]/g, '');
-    const parsed = parseFloat(cleanValue);
-    
-    return !isNaN(parsed) && isFinite(parsed);
-  }).length;
-  
-  // Consider numeric if >80% of sampled values are numeric
-  return numericCount / sample.length > 0.8;
-};
+import type { DataFrequency, PerformanceMetric } from "@/types/forecast";
 
 /**
- * Get only numeric columns from data
+ * Check if a column contains numeric values
  */
-export const getNumericColumns = (data: any[], columns: string[]): string[] => {
-  return columns.filter(col => isNumericColumn(data, col));
-};
+export function isNumericColumn(data: Record<string, unknown>[], column: string): boolean {
+  if (data.length === 0) return false;
 
-/**
- * Analyze time series data for a segment
- */
-export const analyzeSegmentData = (
-  data: any[],
-  segmentColumn: string,
-  segmentValue: string,
-  dateColumn: string
-) => {
-  // Filter data for this segment
-  const segmentData = data.filter(row => row[segmentColumn] === segmentValue);
-  
-  // Sort by date
-  const sortedData = [...segmentData].sort((a, b) => {
-    const dateA = new Date(a[dateColumn]).getTime();
-    const dateB = new Date(b[dateColumn]).getTime();
-    return dateA - dateB;
-  });
+  const sampleSize = Math.min(10, data.length);
+  let numericCount = 0;
 
-  const totalRecords = sortedData.length;
-
-  // Auto-detect frequency by analyzing time differences
-  let detectedFrequency = 'MS'; // Default to monthly
-  
-  if (sortedData.length >= 2) {
-    const dates = sortedData.map(row => new Date(row[dateColumn]));
-    const differences: number[] = [];
-    
-    for (let i = 1; i < Math.min(10, dates.length); i++) {
-      const diffDays = (dates[i].getTime() - dates[i-1].getTime()) / (1000 * 60 * 60 * 24);
-      differences.push(Math.round(diffDays));
-    }
-    
-    const avgDiff = differences.reduce((a, b) => a + b, 0) / differences.length;
-    
-    // Determine frequency based on average difference
-    if (avgDiff <= 1.5) {
-      detectedFrequency = 'D'; // Daily
-    } else if (avgDiff <= 8) {
-      detectedFrequency = 'W'; // Weekly
-    } else if (avgDiff <= 20) {
-      detectedFrequency = 'SMS'; // Semi-monthly
-    } else if (avgDiff <= 35) {
-      detectedFrequency = 'MS'; // Monthly start
-    } else if (avgDiff <= 100) {
-      detectedFrequency = 'QS'; // Quarterly
-    } else {
-      detectedFrequency = 'YS'; // Yearly
+  for (let i = 0; i < sampleSize; i++) {
+    const value = data[i][column];
+    if (value !== null && value !== undefined && !isNaN(Number(value))) {
+      numericCount++;
     }
   }
 
-  // Get date range
-  const firstDate = sortedData.length > 0 ? new Date(sortedData[0][dateColumn]) : null;
-  const lastDate = sortedData.length > 0 ? new Date(sortedData[sortedData.length - 1][dateColumn]) : null;
-
-  return {
-    totalRecords,
-    detectedFrequency,
-    firstDate,
-    lastDate,
-    sortedData,
-  };
-};
+  return numericCount / sampleSize >= 0.8;
+}
 
 /**
- * Get frequency display name
+ * Get all numeric columns from data
  */
-export const getFrequencyName = (freq: string): string => {
-  const names: Record<string, string> = {
-    'D': 'Daily',
-    'W': 'Weekly',
-    'SMS': 'Semi-Monthly',
-    'MS': 'Monthly',
-    'QS': 'Quarterly',
-    'YS': 'Yearly',
-  };
-  return names[freq] || freq;
-};
+export function getNumericColumns(
+  data: Record<string, unknown>[],
+  columns: string[]
+): string[] {
+  return columns.filter((col) => isNumericColumn(data, col));
+}
 
 /**
- * Calculate months between dates
+ * Detect data frequency from dates
  */
-export const calculateMonthsObservable = (
-  firstDate: Date | null,
-  lastDate: Date | null,
-  frequency: string
-): number => {
-  if (!firstDate || !lastDate) return 0;
-  
-  const yearsDiff = lastDate.getFullYear() - firstDate.getFullYear();
-  const monthsDiff = lastDate.getMonth() - firstDate.getMonth();
-  
-  return yearsDiff * 12 + monthsDiff + 1;
-};
+export function detectFrequency(dates: Date[]): DataFrequency {
+  if (dates.length < 2) return "D";
+
+  const diffs: number[] = [];
+  for (let i = 1; i < Math.min(dates.length, 10); i++) {
+    diffs.push(dates[i].getTime() - dates[i - 1].getTime());
+  }
+
+  const avgDiff = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+  const days = avgDiff / (1000 * 60 * 60 * 24);
+
+  if (days < 2) return "D";
+  if (days < 10) return "W";
+  if (days < 60) return "MS";
+  if (days < 200) return "QS";
+  return "YS";
+}
 
 /**
- * Apply a single transformation to data
+ * Calculate Mean Absolute Error
  */
-export const applyTransformation = (
-  data: number[],
-  transformation: string,
-  parameters?: any
-): number[] => {
-  switch (transformation) {
-    case 'log':
-      return data.map(val => val > 0 ? Math.log(val) : NaN);
-    case 'difference':
-      return data.slice(1).map((val, i) => val - data[i]);
-    case 'seasonal_difference':
-      const period = parameters?.seasonal_period || 12;
-      return data.slice(period).map((val, i) => val - data[i]);
-    case 'box_cox':
-      const lambda = parameters?.lambda || 0;
-      if (lambda === 0) {
-        return data.map(val => val > 0 ? Math.log(val) : NaN);
-      }
-      return data.map(val => val > 0 ? (Math.pow(val, lambda) - 1) / lambda : NaN);
-    case 'standardize':
-      // Z-score normalization: (x - mean) / std
-      const validData = data.filter(val => !isNaN(val) && isFinite(val));
-      const mean = validData.reduce((sum, val) => sum + val, 0) / validData.length;
-      const variance = validData.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / validData.length;
-      const std = Math.sqrt(variance);
-      return data.map(val => std > 0 ? (val - mean) / std : 0);
+export function calculateMAE(actual: number[], predicted: number[]): number {
+  if (actual.length !== predicted.length || actual.length === 0) return NaN;
+
+  const sum = actual.reduce((acc, val, i) => {
+    return acc + Math.abs(val - predicted[i]);
+  }, 0);
+
+  return sum / actual.length;
+}
+
+/**
+ * Calculate Root Mean Squared Error
+ */
+export function calculateRMSE(actual: number[], predicted: number[]): number {
+  if (actual.length !== predicted.length || actual.length === 0) return NaN;
+
+  const sum = actual.reduce((acc, val, i) => {
+    return acc + Math.pow(val - predicted[i], 2);
+  }, 0);
+
+  return Math.sqrt(sum / actual.length);
+}
+
+/**
+ * Calculate Mean Absolute Percentage Error
+ */
+export function calculateMAPE(actual: number[], predicted: number[]): number {
+  if (actual.length !== predicted.length || actual.length === 0) return NaN;
+
+  const nonZeroIndices = actual
+    .map((val, i) => (val !== 0 ? i : -1))
+    .filter((i) => i !== -1);
+
+  if (nonZeroIndices.length === 0) return NaN;
+
+  const sum = nonZeroIndices.reduce((acc, i) => {
+    return acc + Math.abs((actual[i] - predicted[i]) / actual[i]);
+  }, 0);
+
+  return (sum / nonZeroIndices.length) * 100;
+}
+
+/**
+ * Calculate R-squared
+ */
+export function calculateRSquared(actual: number[], predicted: number[]): number {
+  if (actual.length !== predicted.length || actual.length === 0) return NaN;
+
+  const mean = actual.reduce((a, b) => a + b, 0) / actual.length;
+
+  const ssRes = actual.reduce((acc, val, i) => {
+    return acc + Math.pow(val - predicted[i], 2);
+  }, 0);
+
+  const ssTot = actual.reduce((acc, val) => {
+    return acc + Math.pow(val - mean, 2);
+  }, 0);
+
+  if (ssTot === 0) return NaN;
+
+  return 1 - ssRes / ssTot;
+}
+
+/**
+ * Calculate coverage (percentage of actuals within prediction intervals)
+ */
+export function calculateCoverage(
+  actual: number[],
+  lower: number[],
+  upper: number[]
+): number {
+  if (actual.length === 0) return NaN;
+
+  const covered = actual.filter((val, i) => val >= lower[i] && val <= upper[i]).length;
+
+  return (covered / actual.length) * 100;
+}
+
+/**
+ * Calculate a specific metric
+ */
+export function calculateMetric(
+  metric: PerformanceMetric,
+  actual: number[],
+  predicted: number[],
+  lower?: number[],
+  upper?: number[]
+): number {
+  switch (metric) {
+    case "mae":
+      return calculateMAE(actual, predicted);
+    case "rmse":
+      return calculateRMSE(actual, predicted);
+    case "mape":
+      return calculateMAPE(actual, predicted);
+    case "mse":
+      return Math.pow(calculateRMSE(actual, predicted), 2);
+    case "r_squared":
+      return calculateRSquared(actual, predicted);
+    case "coverage":
+      if (!lower || !upper) return NaN;
+      return calculateCoverage(actual, lower, upper);
+    case "smape":
+      // Symmetric MAPE
+      if (actual.length === 0) return NaN;
+      const smapeSum = actual.reduce((acc, val, i) => {
+        const denom = Math.abs(val) + Math.abs(predicted[i]);
+        return acc + (denom === 0 ? 0 : Math.abs(val - predicted[i]) / denom);
+      }, 0);
+      return (smapeSum / actual.length) * 100;
     default:
-      return data;
+      return NaN;
   }
-};
+}
 
 /**
- * Apply multiple transformations in sequence
+ * Format a date for display
  */
-export const applyTransformationChain = (
-  data: number[],
-  transformations: any[]
-): number[] => {
-  let transformed = [...data];
-  for (const transform of transformations) {
-    if (transform.type !== 'none') {
-      transformed = applyTransformation(transformed, transform.type, transform.parameters);
-    }
-  }
-  return transformed;
-};
-
-/**
- * Apply transformations from analysis state to CSV data
- */
-export const applyAnalysisTransformations = (
-  data: any[],
-  dateColumn: string,
-  dependentVariable: string,
-  regressors: string[],
-  analysisState: Record<string, any>
-): { transformedData: any[]; transformationsSummary: string[] } => {
-  const transformedData = [...data];
-  const transformationsSummary: string[] = [];
-
-  // Apply transformations to dependent variable
-  if (analysisState?.dependent?.transformations && analysisState.dependent.transformations.length > 0) {
-    const depTransforms = analysisState.dependent.transformations;
-    const depValues = data.map(row => parseFloat(row[dependentVariable]));
-    const transformedDepValues = applyTransformationChain(depValues, depTransforms);
-    
-    transformedData.forEach((row, i) => {
-      row[dependentVariable] = transformedDepValues[i];
-    });
-    
-    const transformNames = depTransforms.map((t: any) => t.type).filter((t: string) => t !== 'none').join(' → ');
-    if (transformNames) {
-      transformationsSummary.push(`${dependentVariable}: ${transformNames}`);
-    }
-  }
-
-  // Apply transformations to regressors
-  regressors.forEach(regressor => {
-    if (analysisState?.[regressor]?.transformations && analysisState[regressor].transformations.length > 0) {
-      const regTransforms = analysisState[regressor].transformations;
-      const regValues = data.map(row => parseFloat(row[regressor]));
-      const transformedRegValues = applyTransformationChain(regValues, regTransforms);
-      
-      transformedData.forEach((row, i) => {
-        row[regressor] = transformedRegValues[i];
-      });
-      
-      const transformNames = regTransforms.map((t: any) => t.type).filter((t: string) => t !== 'none').join(' → ');
-      if (transformNames) {
-        transformationsSummary.push(`${regressor}: ${transformNames}`);
-      }
-    }
+export function formatDate(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
-
-  return { transformedData, transformationsSummary };
-};
+}
 
 /**
- * Get transformation information
+ * Parse CSV date string to Date object
  */
-export const getTransformationInfo = (type: string) => {
-  const info: Record<string, any> = {
-    log: {
-      name: "Log Transform",
-      description: "Applies natural logarithm to the data",
-      useCase: "Use when variance increases with the level of the series (heteroskedasticity). Common for exponential growth patterns.",
-      example: "Sales data that doubles each period, stock prices, population growth"
-    },
-    difference: {
-      name: "First Difference",
-      description: "Subtracts previous value from current value",
-      useCase: "Removes linear trends and achieves stationarity. Most common transformation for non-stationary data.",
-      example: "GDP data with upward trend, temperature data with seasonal trend"
-    },
-    seasonal_difference: {
-      name: "Seasonal Difference",
-      description: "Subtracts value from same season in previous cycle",
-      useCase: "Removes seasonal patterns. Use when data shows repeating patterns (e.g., monthly, quarterly).",
-      example: "Retail sales with monthly patterns, energy consumption with weekly cycles"
-    },
-    box_cox: {
-      name: "Box-Cox Transform",
-      description: "Power transformation that automatically finds optimal lambda",
-      useCase: "Stabilizes variance and makes data more normal. More flexible than log transform.",
-      example: "Any data with non-constant variance that needs normalization"
-    },
-    standardize: {
-      name: "Standardize (Z-Score)",
-      description: "Transforms data to have mean=0 and standard deviation=1 using (x - mean) / std",
-      useCase: "Makes variables comparable when they have different scales or units. Essential for comparing multiple time series.",
-      example: "Comparing sales ($) with temperature (°C), or variables with very different magnitudes"
-    }
-  };
-  return info[type] || null;
-};
+export function parseDate(dateStr: string): Date | null {
+  const date = new Date(dateStr);
+  return isNaN(date.getTime()) ? null : date;
+}
