@@ -316,6 +316,13 @@ const Index = () => {
       return;
     }
 
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) {
+      toast.error("Please sign in again");
+      return;
+    }
+
     setIsRunning(true);
     setForecastResults(null);
     setSegmentProgress(
@@ -324,14 +331,6 @@ const Index = () => {
     setActiveTab("progress");
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) {
-        toast.error("Please sign in again");
-        setIsRunning(false);
-        return;
-      }
-
       const payload: ForecastJobPayload = {
         model: selectedModel,
         date_column: dateColumn,
