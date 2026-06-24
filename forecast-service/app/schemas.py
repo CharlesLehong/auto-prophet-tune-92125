@@ -20,6 +20,7 @@ class ForecastRequest(BaseModel):
     segments: list[SegmentSpec]
     data: list[dict[str, Any]]
     metrics: list[str]
+    benchmark_model: Optional[str] = None
 
 
 class ForecastPoint(BaseModel):

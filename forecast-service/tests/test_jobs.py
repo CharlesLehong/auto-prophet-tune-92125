@@ -5,7 +5,7 @@ os.environ["SUPABASE_SERVICE_ROLE_KEY"] = "service-key"
 os.environ["SUPABASE_JWT_SECRET"] = "test-secret-that-is-long-enough!!"
 
 from app import jobs  # noqa: E402
-from app.schemas import ForecastRequest  # noqa: E402
+from app.schemas import ForecastRequest, SegmentSpec, SegmentOutput, ForecastPoint  # noqa: E402
 
 
 def _make_request():
@@ -84,3 +84,60 @@ def test_process_job_per_segment_failure_does_not_abort(monkeypatch):
 
         # Metrics dict must be empty.
         assert seg["metrics"] == {}, f"metrics non-empty for {seg['segmentValue']}"
+
+
+def _stub_out():
+    p = ForecastPoint(date="2020-01-01", predicted=1.0, lower_bound=0.5, upper_bound=1.5)
+    return SegmentOutput(training_data=[p], test_data=[p], forecast_data=[p], metrics={"mae": 0.1})
+
+
+def _bm_request():
+    rows = [{"date": f"2020-{m:02d}-01", "segment": "A", "y": float(m)} for m in range(1, 5)]
+    return ForecastRequest(
+        model="prophet", date_column="date", segment_column="segment",
+        dependent_variable="y",
+        segments=[SegmentSpec(segmentValue="A", segment="seg", forecast_periods=1,
+                              frequency="MS", training_records=3, test_records=1,
+                              prophet_params={"interval_width": 0.8})],
+        data=rows, metrics=["mae"], benchmark_model="autogluon",
+    )
+
+
+def test_interval_width_in_result(monkeypatch):
+    monkeypatch.setattr(jobs, "get_model", lambda name: (lambda **kw: _stub_out()))
+    captured = []
+    monkeypatch.setattr(jobs.db, "update_job", lambda jid, fields: captured.append(fields))
+    req = _bm_request()
+    req.benchmark_model = None
+    jobs.process_job("job-iw", req)
+    seg = captured[-1]["results"]["segments"][0]
+    assert seg["interval_width"] == 0.8
+
+
+def test_benchmark_attached(monkeypatch):
+    monkeypatch.setattr(jobs, "get_model", lambda name: (lambda **kw: _stub_out()))
+    captured = []
+    monkeypatch.setattr(jobs.db, "update_job", lambda jid, fields: captured.append(fields))
+    jobs.process_job("job-bm", _bm_request())
+    seg = captured[-1]["results"]["segments"][0]
+    assert seg["benchmark_model"] == "autogluon"
+    assert seg["benchmark_test_data"] and seg["benchmark_forecast_data"]
+    assert seg["benchmark_metrics"] == {"mae": 0.1}
+
+
+def test_benchmark_failure_keeps_primary(monkeypatch):
+    def fake_get(name):
+        if name == "autogluon":
+            def boom(**kw):
+                raise RuntimeError("benchmark failed")
+            return boom
+        return lambda **kw: _stub_out()
+    monkeypatch.setattr(jobs, "get_model", fake_get)
+    captured = []
+    monkeypatch.setattr(jobs.db, "update_job", lambda jid, fields: captured.append(fields))
+    jobs.process_job("job-bmfail", _bm_request())
+    final = captured[-1]
+    seg = final["results"]["segments"][0]
+    assert "benchmark_model" not in seg          # benchmark omitted
+    assert seg["test_data"]                        # primary intact
+    assert final["status"] == "completed"
