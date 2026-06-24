@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from "recharts";
+import { Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, ComposedChart } from "recharts";
 import { Target, Activity, Wand2, Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -387,7 +387,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                   </Badge>
                 </div>
                   <ResponsiveContainer width="100%" height={400}>
-                    <AreaChart data={(() => {
+                    <ComposedChart data={(() => {
                       const trainingData = segment.training_data || [];
                       const testData = segment.test_data || [];
                       const forecastData = segment.forecast_data || [];
@@ -497,7 +497,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       name="Forecast"
                       connectNulls={true}
                     />
-                  </AreaChart>
+                  </ComposedChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>}
