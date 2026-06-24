@@ -20,6 +20,11 @@ def _to_tsdf(df, date_column, value_column, pfreq):
     # from_data_frame() already infers the correct freq from the data, the
     # convert_frequency() call is unnecessary and is omitted. pfreq is still
     # passed to TimeSeriesPredictor(freq=...) in _predict_block.
+    # KNOWN DEBT: convert_frequency() was removed due to a Windows/joblib access
+    # violation under pytest. TimeSeriesDataFrame.from_data_frame() (AutoGluon
+    # 1.5.0) has no `freq` parameter, so frequency cannot be anchored here.
+    # For irregular/gappy production data on Linux, frequency anchoring or
+    # regularization (e.g. resample before calling _to_tsdf) may need revisiting.
     tsdf = TimeSeriesDataFrame.from_data_frame(
         d[["item_id", "timestamp", "target"]],
         id_column="item_id", timestamp_column="timestamp",
