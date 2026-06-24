@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,31 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
   const [exportDialog, setExportDialog] = useState(false);
   const [reportName, setReportName] = useState("");
   const [exportFormat, setExportFormat] = useState<"csv" | "html" | "pdf">("pdf");
+  const [commentary, setCommentary] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    setCommentary({});
+    (results.segments || []).forEach(async (seg) => {
+      if (seg.error) return;
+      const fc = seg.forecast_data || [];
+      const forecastSummary = fc.length > 0
+        ? { first: fc[0].predicted, last: fc[fc.length - 1].predicted, periods: fc.length }
+        : { periods: 0 };
+      try {
+        const { data, error } = await supabase.functions.invoke("forecast-commentary", {
+          body: { segmentValue: seg.segmentValue, model: seg.model || results.model,
+                  metrics: seg.metrics || {}, forecastSummary },
+        });
+        if (!cancelled && !error && data?.commentary) {
+          setCommentary((prev) => ({ ...prev, [seg.segmentValue]: data.commentary }));
+        }
+      } catch {
+        // best-effort; leave commentary box hidden on failure
+      }
+    });
+    return () => { cancelled = true; };
+  }, [results]);
 
   // Helper to check if a value is valid (not NaN, null, or undefined)
   const isValidNumber = (value: any): value is number => {
@@ -317,12 +343,12 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                     })}
                   </div>
 
-                  {segment.ai_commentary && (
+                  {commentary[segment.segmentValue] && (
                     <Alert className="bg-primary/5 border-primary/20">
                       <Wand2 className="h-4 w-4" />
                       <AlertDescription>
                         <p className="font-semibold text-sm mb-2">AI Analysis</p>
-                        <p className="text-sm whitespace-pre-line">{segment.ai_commentary}</p>
+                        <p className="text-sm whitespace-pre-line">{commentary[segment.segmentValue]}</p>
                       </AlertDescription>
                     </Alert>
                   )}
