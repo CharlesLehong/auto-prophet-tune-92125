@@ -17,10 +17,10 @@ import { ForecastProgress } from "@/components/forecast/ForecastProgress";
 import { ForecastResults } from "@/components/forecast/ForecastResults";
 import { PerformanceMetricSelector } from "@/components/forecast/PerformanceMetricSelector";
 import { DataAnalysisTools } from "@/components/forecast/DataAnalysisTools";
-// import { SaveModelDialog } from "@/components/forecast/SaveModelDialog";
+import { SaveModelDialog } from "@/components/forecast/SaveModelDialog";
 import { ModelDownload } from "@/components/forecast/ModelDownload";
 
-import { ChevronRight, Play, Save, LogOut, Library, Wand2, Loader2 } from "lucide-react";
+import { ChevronRight, Play, Save, LogOut, Wand2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { ForecastModel, ProphetParameters, SegmentConfig, PerformanceMetric, ForecastConfig } from "@/types/forecast";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
@@ -886,15 +886,10 @@ const Index = () => {
               </p>
             </div>
             <div className="flex gap-2">
-              {/* Temporarily disabled until database types sync */}
-              {/* <Button variant="outline" onClick={() => navigate("/models")}>
-                <Library className="mr-2 h-4 w-4" />
-                My Models
-              </Button>
               <Button variant="outline" onClick={handleSaveModel}>
                 <Save className="mr-2 h-4 w-4" />
                 {currentModelId ? "Update Model" : "Save Model"}
-              </Button> */}
+              </Button>
               <Button variant="outline" onClick={handleSignOut}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
@@ -1191,8 +1186,7 @@ const Index = () => {
           </TabsContent>
         </Tabs>
 
-        {/* Temporarily disabled until database types sync */}
-        {/* <SaveModelDialog
+        <SaveModelDialog
           open={saveDialogOpen}
           onOpenChange={setSaveDialogOpen}
           config={getCurrentConfig()}
@@ -1200,7 +1194,11 @@ const Index = () => {
           existingModelName={currentModelName}
           csvData={csvData}
           forecastResults={forecastResults}
-        /> */}
+          onSaved={(modelId, modelName) => {
+            setCurrentModelId(modelId);
+            setCurrentModelName(modelName);
+          }}
+        />
       </div>
     </div>
   );
