@@ -33,7 +33,7 @@ def process_job(job_id: str, req: ForecastRequest) -> None:
                 segments_out.append({
                     "segment": spec.segment, "segmentValue": spec.segmentValue,
                     "model": req.model,
-                    **out.model_dump(exclude_none=False),
+                    **out.model_dump(exclude_none=True),
                 })
             except Exception as seg_err:  # noqa: BLE001
                 segments_out.append({
