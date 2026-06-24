@@ -1,23 +1,14 @@
 import os
-import time
-import jwt
 from fastapi.testclient import TestClient
 
-os.environ["SUPABASE_JWT_SECRET"] = "test-secret-that-is-long-enough!!"
 os.environ["SUPABASE_URL"] = "https://example.supabase.co"
 os.environ["SUPABASE_SERVICE_ROLE_KEY"] = "service-key"
+os.environ["SUPABASE_ANON_KEY"] = "sb_publishable_test"
 
-from app import db, jobs  # noqa: E402
+from app import db, jobs, main  # noqa: E402
 from app.main import app  # noqa: E402
 
 client = TestClient(app)
-
-
-def _token(sub="u1"):
-    return jwt.encode(
-        {"sub": sub, "aud": "authenticated", "exp": int(time.time()) + 3600},
-        "test-secret-that-is-long-enough!!", algorithm="HS256",
-    )
 
 
 def _payload():
@@ -42,11 +33,12 @@ def test_post_forecast_requires_auth():
 
 
 def test_post_forecast_creates_job(monkeypatch):
+    monkeypatch.setattr(main, "verify_token", lambda token: "u1")
     monkeypatch.setattr(db, "create_job", lambda user_id, model: "job-xyz")
     monkeypatch.setattr(jobs, "process_job", lambda job_id, req: None)
     resp = client.post(
         "/forecast", json=_payload(),
-        headers={"Authorization": f"Bearer {_token()}"},
+        headers={"Authorization": "Bearer any-token"},
     )
     assert resp.status_code == 200
     assert resp.json()["job_id"] == "job-xyz"
