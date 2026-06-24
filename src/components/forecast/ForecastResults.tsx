@@ -412,8 +412,8 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                           actual: isValidNumber(point.actual) ? point.actual : null,
                           fitted: isValidNumber(fitted) ? fitted : null,
                           forecast: isValidNumber(forecast) ? forecast : null,
-                          lower_bound: isValidNumber(point.lower_bound) ? point.lower_bound : null,
-                          upper_bound: isValidNumber(point.upper_bound) ? point.upper_bound : null,
+                          ci_base: (isValidNumber(point.lower_bound) && isValidNumber(point.upper_bound)) ? point.lower_bound : null,
+                          ci_span: (isValidNumber(point.lower_bound) && isValidNumber(point.upper_bound)) ? point.upper_bound - point.lower_bound : null,
                         };
                       });
                     })()}>
@@ -443,21 +443,27 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                     
                     <Area
                       type="monotone"
-                      dataKey="upper_bound"
-                      stroke="rgb(16, 185, 129)"
-                      strokeWidth={1}
-                      strokeOpacity={0.3}
-                      fill={`url(#confidenceGradient-transformed-${segment.segment})`}
-                      name={getConfidenceLabels(segment).upper}
+                      dataKey="ci_base"
+                      stackId="ci"
+                      stroke="none"
+                      fill="none"
+                      fillOpacity={0}
+                      name=" "
+                      legendType="none"
+                      connectNulls={true}
+                      activeDot={false}
                     />
                     <Area
                       type="monotone"
-                      dataKey="lower_bound"
+                      dataKey="ci_span"
+                      stackId="ci"
                       stroke="rgb(16, 185, 129)"
                       strokeWidth={1}
-                      strokeOpacity={0.3}
+                      strokeOpacity={0.25}
                       fill={`url(#confidenceGradient-transformed-${segment.segment})`}
-                      name={getConfidenceLabels(segment).lower}
+                      name={`${((segment.interval_width ?? 0.8) * 100).toFixed(0)}% Confidence`}
+                      connectNulls={true}
+                      activeDot={false}
                     />
                     
                     <Line
